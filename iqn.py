@@ -14,7 +14,8 @@ import scipy.sparse as sparse
 from scipy.sparse import csr_matrix, linalg
 import time
 
-
+import matplotlib
+matplotlib.use("agg")
 # In[2]:
 
 
@@ -324,10 +325,7 @@ class Logistic:
         self.μ = reg
         self.d = X.shape[1]
         self.N = X.shape[0]
-        if self.N == 1:
-            self.L = np.linalg.norm(X[0]) ** 2 / 4 + reg
-        else:
-            self.L = linalg.svds(X, k=1)[1] ** 2 / 4 + reg
+        self.L = linalg.svds(X, k=1)[1] ** 2 / 4 + reg
         self.M = np.mean(np.linalg.norm(self.X, axis=1) ** 3) / self.μ ** (3/2)
         self.kappa = self.L / self.μ
         print("Logistic regression oracle created")
@@ -338,27 +336,27 @@ class Logistic:
         pred = self.Y * (self.X @ w)
         pos = np.sum(np.log(1+np.exp(-pred[pred>=0])))
         neg = np.sum(np.log(1+np.exp(pred[pred<0]))-pred[pred<0])
-        return pos + neg + 0.5 * self.μ * (w.T @ w)[0, 0]
+        return (pos + neg) / self.N + 0.5 * self.μ * (w.T @ w)[0, 0]
     
     def grad(self, w):
         pred = self.Y * (self.X @ w)
         p = 0.5 * (1 + np.tanh(-0.5 * pred))
-        return -self.X.T @ (self.Y * p) + self.μ * w
+        return -self.X.T @ (self.Y * p) / self.N + self.μ * w
     
     def hes_vec(self, w, v):
         pred = self.Y * (self.X @ w)
         p = 0.5 * (1 + np.tanh(-0.5 * pred))
-        return self.X.T @ (self.X @ v * p * (1-p)) + self.μ * v
+        return self.X.T @ (self.X @ v * p * (1-p)) / self.N + self.μ * v
     
     def hes(self, w):
         pred = self.Y * (self.X @ w)
         p = 0.5 * (1 + np.tanh(-0.5 * pred))
-        return self.X.T @ (self.X * p * (1-p)) + self.μ * np.eye(self.d)
+        return self.X.T @ (self.X * p * (1-p)) / self.N + self.μ * np.eye(self.d)
     
     def hes_diag(self, w):
         pred = self.Y * (self.X @ w)
         p = 0.5 * (1 + np.tanh(-0.5 * pred))
-        return np.sum(self.X ** 2 * p * (1-p), axis=0) + self.μ * np.ones(self.d)
+        return np.sum(self.X ** 2 * p * (1-p), axis=0) / self.N + self.μ * np.ones(self.d)
 
 
 # In[9]:
@@ -424,34 +422,44 @@ def grsr1_sol(w, G, epochs, ours=True, corr=False):
     return res
 
 
-def iqn_sol(oracles, ws, grads, Gs, 
+def iqn_sol(oracles, max_L, 
             w_opt, init_w, epochs=200):
-    N = len(ws)
+    N = len(oracles)
+    Gs = []
+    ws = []
+    grads = []
+    
+    g = np.zeros_like(init_w)
+    for i in range(N):
+        Gs.append(np.eye(X.shape[1]) * max_L)
+        ws.append(np.copy(init_w))
+        grads.append(oracles[i].grad(init_w))
+        g = g + grads[-1]        
     res = [np.linalg.norm(ws[-1] - w_opt)]
     w = np.copy(init_w)
     B = np.copy(Gs[0])
-    u = np.copy(ws[0])
-    g = np.copy(ws[0])
+    u = Gs[0] @ ws[0]
+    g = g / N
     invG = np.eye(d) / max_L
     for _ in range(epochs):
         for i in range(N):
-            cur_grad = oracles[i].grad(ws[i])
+            w = invG @ (u - g)
+            cur_grad = oracles[i].grad(w)
             s = w - ws[i]
             yy = cur_grad - grads[i]
             
             stoc_Hessian = Gs[i] + yy@yy.T / (yy.T@s) - \
                            (Gs[i]@ s)@(s.T@Gs[i]) / (s.T @ Gs[i] @s)
             B = B + (stoc_Hessian - Gs[i]) / N
-            u = u + (B @ w - Gs[i] @ ws[i]) / N
+            u = u + (stoc_Hessian @ w - Gs[i] @ ws[i]) / N
             g = g + yy / N
+            
+            U = invG - (invG@ yy) @ (yy.T@ invG) / (N * yy.T@s + yy.T@ invG @ yy)
+            invG = U + (U@(Gs[i]@s))@((s.T@Gs[i])@U) / (N* s.T@Gs[i]@s - (s.T@Gs[i])@U@(Gs[i]@s))
             
             Gs[i] = np.copy(stoc_Hessian)
             grads[i] = np.copy(cur_grad)
             ws[i] = np.copy(w)
-            
-            U = invG - (invG@ yy) @ (yy.T@ invG) / (N * yy.T@s + yy.T@ invG @ yy)
-            invG = U + (U@(Gs[i]@s))@((s.T@Gs[i])@U) / (N* s.T@Gs[i]@s - (s.T@Gs[i])@U@(Gs[i]@s))
-            w = invG @ (u - g)
             
         res.append(np.linalg.norm(ws[-1] - w_opt))
         
@@ -469,6 +477,8 @@ def prepare_dataset(dataset):
     return X, Y
 dataset = 'a6a' ## 'w8a', 'a6a', 'w6a'
 X, Y = prepare_dataset(dataset)
+X = X[:11000, :]
+Y = Y[:11000, :]
 reg = 0.01
 oracle = Logistic(X, Y, reg)
 print(X.shape, Y.shape)
@@ -484,37 +494,17 @@ res, w_opt = newton_sol(w, 20)
 
 
 oracles = []
-for i in range(X.shape[0]):
-    oracles.append(Logistic(X[[i],:], Y[[i], :], reg))
-print(X.shape, Y.shape)
+for i in range(11):
+    oracles.append(Logistic(X[i*1000:1000+i*1000,:], Y[i*1000:1000+i*1000, :], reg))
 
-N = X.shape[0]
-d = X.shape[1]
+
 Ls = [o.L for o in oracles]
 Ms = [o.M for o in oracles]
 max_L = max(Ls)
 max_M = max(Ms)
-Gs = []
-ws = []
-grads = []
+
 init_w = np.random.randn(d, 1) / 10
-for i in range(N):
-    Gs.append(np.eye(X.shape[1]) * max_L)
-    ws = [np.zeros_like(init_w)] * N
-    grads.append(np.zeros_like(init_w))    
-iqn = iqn_sol(oracles, ws, grads, Gs, 
-              w_opt, init_w)
 
-for i in range(N):
-    Gs.append(np.eye(X.shape[1]) * max_L)
-    ws = [np.zeros_like(init_w)] * N
-    grads.append(np.zeros_like(init_w))
-invG = np.eye(d) / max_L     
+iqn = iqn_sol(oracles, max_L, w_opt, init_w, epochs=50)
 #sliqn = sliqn_sol(ws, grads, Gs, invG)
-
-for i in range(N):
-    Gs.append(np.eye(X.shape[1]) * max_L)
-    ws = [np.zeros_like(init_w)] * N
-    grads.append(np.zeros_like(init_w))
-invG = np.eye(d) / max_L     
 #sliqn_sr1 = sliqn_sr1_sol(ws, grads, Gs, invG)
