@@ -492,7 +492,8 @@ def iqs_sol(oracles, max_L, max_M,
             yy = cur_grad - grads[i]
             r = np.sqrt(s.T @ oracles[i].hes_vec(ws[i], s))
             scale = 1 + max_M * r
-            scale_Hessian = (1 + max_M * r) * Gs[i]
+            scale = 1
+            scale_Hessian = scale * Gs[i]
             ind = np.argmax(np.diag(scale_Hessian) / oracles[i].hes_diag(w))
             gv = np.zeros([d, 1])
             gv[ind] = 1
@@ -530,7 +531,12 @@ print(X.shape, Y.shape)
 
 
 # In[11]:
-
+batch_size = 1000
+num_of_batches = int(X.shape[0] / batch_size)
+data_size = batch_size * num_of_batches
+X = X[:data_size, :]
+Y = Y[:data_size]
+oracle = Logistic(X, Y, reg)
 
 d = oracle.d
 G = np.eye(d) * oracle.L
@@ -540,7 +546,6 @@ res, w_opt = newton_sol(w, 20)
 
 oracles = []
 
-batch_size = 100
 for i in range(int(X.shape[0] / batch_size)):
     oracles.append(Logistic(X[i*batch_size:batch_size+i*batch_size,:], 
         Y[i*batch_size:batch_size+i*batch_size, :], reg))
@@ -549,12 +554,12 @@ print(len(oracles))
 
 Ls = [o.L for o in oracles]
 Ms = [o.M for o in oracles]
-max_L = max(Ls)
+max_L = 0.5
 max_M = max(Ms)
 
 init_w = np.random.randn(d, 1) / 10
 
 iqn = iqn_sol(oracles, max_L, w_opt, init_w, epochs=50)
-iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, epochs=50)
+iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, epochs=200)
 #sliqn = sliqn_sol(ws, grads, Gs, invG)
 #sliqn_sr1 = sliqn_sr1_sol(ws, grads, Gs, invG)
