@@ -595,13 +595,8 @@ def iqn_sr1_sol(oracles, max_L, max_M,
             yy = cur_grad - grads[i]
             r = np.sqrt(s.T @ oracles[i].hes_vec(ws[i], s))
             
-            scale = 1.
-                
-            scale_Hessian = scale * scale * Gs[i]
-            scale_yy = scale * yy
-            
-            vec_diff = scale_Hessian @ s - scale_yy
-            stoc_Hessian = scale_Hessian - vec_diff @ vec_diff.T / (vec_diff.T @ s)
+            vec_diff = Gs[i] @ s - yy
+            stoc_Hessian = Gs[i] - vec_diff @ vec_diff.T / (vec_diff.T @ s)
             
             B = B + (stoc_Hessian - Gs[i]) / N
             u = u + (stoc_Hessian @ w - Gs[i] @ ws[i]) / N
@@ -612,6 +607,59 @@ def iqn_sr1_sol(oracles, max_L, max_M,
             ws[i] = np.copy(w)
             
         res.append(np.linalg.norm(ws[-1] - w_opt))
+        
+    return res
+
+def iqn_greedy_sr1_sol(oracles, max_L, max_M,
+            w_opt, init_w, corr=False, epochs=200):
+    N = len(oracles)
+    Gs = []
+    ws = []
+    grads = []
+    
+    g = np.zeros_like(init_w)
+    for i in range(N):
+        Gs.append(np.eye(X.shape[1]) * max_L)
+        ws.append(np.copy(init_w))
+        grads.append(oracles[i].grad(init_w))
+        g = g + grads[-1]        
+    res = [np.linalg.norm(ws[-1] - w_opt)]
+    w = np.copy(init_w)
+    B = np.copy(Gs[0])
+    u = Gs[0] @ ws[0]
+    g = g / N
+    for _ in range(epochs):
+        for i in range(N):
+            w = np.linalg.pinv(B) @ (u - g)
+            cur_grad = oracles[i].grad(w)
+            s = w - ws[i]
+            yy = cur_grad - grads[i]
+            r = np.sqrt(s.T @ oracles[i].hes_vec(ws[i], s))
+            
+            if corr:
+                scale = 1. + max_M * r
+            else:   
+                scale = 1.
+                
+            scale_Hessian = scale * Gs[i]
+            
+            base_Hessian = oracles[i].hes(w)
+            ind = np.argmax(np.diag(scale_Hessian) - oracles[i].hes_diag(w))
+            gv = np.zeros([d, 1])
+            gv[ind] = 1
+            
+            Hessian_diff = scale_Hessian - base_Hessian
+            stoc_Hessian_2 = scale_Hessian - Hessian_diff @ gv @ gv.T @ Hessian_diff / (gv.T @ Hessian_diff @ gv + 1e-40)
+            B = B + (stoc_Hessian_2 - Gs[i]) / N
+            u = u + (stoc_Hessian_2 @ w - Gs[i] @ ws[i]) / N
+            g = g + yy / N
+                        
+            Gs[i] = np.copy(stoc_Hessian_2)
+            grads[i] = np.copy(cur_grad)
+            ws[i] = np.copy(w)
+            
+        res.append(np.linalg.norm(ws[-1] - w_opt))
+        print(str(scale)+ " " + str(res[-1]))
         
     return res
 
@@ -681,7 +729,7 @@ def prepare_dataset(dataset):
 dataset = 'a6a' ## 'w8a', 'a6a', 'w6a'
 X, Y = prepare_dataset(dataset)
 reg = 0.01
-reg = 1e-3
+reg = 1e-5
 oracle = Logistic(X, Y, reg)
 print(X.shape, Y.shape)
 
@@ -710,7 +758,7 @@ print(len(oracles))
 
 Ls = [o.L for o in oracles]
 Ms = [o.M for o in oracles]
-max_L = 0.05
+max_L = 0.1
 max_M = 0.03
 
 init_w = np.random.randn(d, 1) / 10
@@ -718,10 +766,29 @@ init_w = np.random.randn(d, 1) / 10
 iqn = iqn_sol(oracles, max_L, w_opt, init_w, epochs=500)
 iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, epochs=200)
 sliqn = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=True, epochs=500)
-iqn_sr1 = iqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=True, epochs=1000)
-max_M = 0.5
+iqn_sr1 = iqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=True, epochs=500)
+max_M = 1e-3
+iqn_greedy_sr1 = iqn_greedy_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
+max_M = 0.05
 sliqn_sr1 = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=True, epochs=1000)
 print(sliqn[300:500])
 print(iqn_sr1[300:500])
 print(sliqn_sr1[300:500])
 
+fig, ax = plt.subplots(1, 1, figsize=(5, 4))
+# plt.plot(grsr1v1, '--', label='GrSR1v1')
+# plt.plot(grsr1v2, '-', label='GrSR1v2')
+plt.plot(iqn[:500], '-', label='iqn', linewidth=2)
+plt.plot(sliqn[:500], '-.', label='sliqn', linewidth=2)
+plt.plot(iqn_sr1[:500], '--', label='iqn_sr1', linewidth=2)
+plt.plot(iqn_greedy_sr1[:500], '.', label='iqn_greedy_sr1', linewidth=2)
+plt.plot(sliqn_sr1[:500], ':', label='sliqn_sr1', linewidth=2)
+ax.grid()
+ax.legend()
+ax.set_yscale('log')  
+# plt.xscale('log')  
+ax.set_ylabel('$\lambda_f(x_k)$')
+ax.set_xlabel('Epochs, $n=500, \kappa=%d$'%(oracles[0].kappa))
+ax.set_title('General Function Minimization')
+plt.tight_layout()  
+plt.savefig('sliqn-sr1-bfgs.pdf', format='pdf', bbox_inches='tight', dpi=300)
