@@ -16,6 +16,7 @@ import time
 
 import matplotlib
 matplotlib.use("agg")
+np.random.seed(22556)
 # In[2]:
 
 
@@ -514,6 +515,10 @@ def iqs_sol(oracles, max_L, max_M,
     return res
 # In[10]:
 
+def sherman_morrison_formula(invA, u, v):
+    invA = invA - invA @ u @ v.T @ invA / (1 + u.T @ invA @ v)
+    return invA
+
 def sliqn_sol(oracles, max_L, max_M,
             w_opt, init_w, corr=False, epochs=200):
     N = len(oracles)
@@ -610,6 +615,48 @@ def iqn_sr1_sol(oracles, max_L, max_M,
         
     return res
 
+grsr1_ws = []
+grsr1_Gs = []
+grsr1_gs = []
+grsr1_invGs = []
+def grsr1_sol(oracle, init_w, max_L, epochs, w_opt, ours=True, corr=False):
+    max_L = oracle.L
+    w = np.copy(init_w)
+    G = np.eye(oracle.d) * max_L
+    gw = oracle.grad(w)
+    res = [np.linalg.norm(gw)]
+    invG = np.linalg.pinv(G)
+    for i in range(epochs):
+        grsr1_ws.append(w)
+        dw = - invG @ gw
+        if corr:
+            r = np.sqrt(dw.T @ oracle.hes_vec(w, dw))
+            G = G * (1 + oracle.M * r)
+            invG = invG / (1 + oracle.M * r)
+        w = w + dw    
+        if ours:  
+            ind = np.argmax(np.diag(G) - oracle.hes_diag(w))
+        else:    
+            ind = np.argmax(np.diag(G) / oracle.hes_diag(w))
+        u = np.zeros([d, 1])
+        u[ind] = 1
+    
+        Gu = G @ u
+        Au = oracle.hes_vec(w, u)
+        G = G - (Gu - Au) @ (Gu - Au).T / (u.T @ (Gu - Au) + 1e-30)
+        grsr1_Gs.append(G)
+        tmp_invG = np.copy(invG)
+        v = invG @ Au
+        invG = invG + (u - v) @ (u - v).T / (u.T @ oracle.hes_vec(w, u-v) + 1e-30) 
+        gw = oracle.grad(w)
+        grsr1_gs.append(gw)
+        grsr1_invGs.append(invG)
+        res.append(np.linalg.norm(w - w_opt))
+        print(res[-1])
+    print(res[-1])
+    return res
+
+
 def iqn_greedy_sr1_sol(oracles, max_L, max_M,
             w_opt, init_w, corr=False, epochs=200):
     N = len(oracles)
@@ -628,10 +675,13 @@ def iqn_greedy_sr1_sol(oracles, max_L, max_M,
     B = np.copy(Gs[0])
     u = Gs[0] @ ws[0]
     g = g / N
-    for _ in range(epochs):
+    invB = np.eye(X.shape[1]) / max_L
+    for epo in range(epochs):
         for i in range(N):
+            print("w diff:" + str(np.max(np.abs(grsr1_ws[epo] - w))))            
             w = np.linalg.pinv(B) @ (u - g)
             cur_grad = oracles[i].grad(w)
+            print("grad diff:" + str(np.max(np.abs(grsr1_gs[epo] - cur_grad))))
             s = w - ws[i]
             yy = cur_grad - grads[i]
             r = np.sqrt(s.T @ oracles[i].hes_vec(ws[i], s))
@@ -649,15 +699,19 @@ def iqn_greedy_sr1_sol(oracles, max_L, max_M,
             gv[ind] = 1
             
             Hessian_diff = scale_Hessian - base_Hessian
-            stoc_Hessian_2 = scale_Hessian - Hessian_diff @ gv @ gv.T @ Hessian_diff / (gv.T @ Hessian_diff @ gv + 1e-40)
+            stoc_Hessian_2 = scale_Hessian - Hessian_diff @ gv @ gv.T @ Hessian_diff / (gv.T @ Hessian_diff @ gv + 1e-30)
             B = B + (stoc_Hessian_2 - Gs[i]) / N
             u = u + (stoc_Hessian_2 @ w - Gs[i] @ ws[i]) / N
             g = g + yy / N
+            
+            v = invB @ base_Hessian @ gv
+            invB = invB + (gv - v) @ (gv - v).T / ((N - 1)* gv.T @ Hessian_diff @ gv +  gv.T @ Hessian_diff @ v)             
                         
             Gs[i] = np.copy(stoc_Hessian_2)
             grads[i] = np.copy(cur_grad)
             ws[i] = np.copy(w)
-            
+            print("B diff: " + str(np.max(np.abs(B - grsr1_Gs[epo]))))
+            print("invB diff: " + str(np.max(np.abs(invB - grsr1_invGs[epo]))))
         res.append(np.linalg.norm(ws[-1] - w_opt))
         print(str(scale)+ " " + str(res[-1]))
         
@@ -729,13 +783,13 @@ def prepare_dataset(dataset):
 dataset = 'a6a' ## 'w8a', 'a6a', 'w6a'
 X, Y = prepare_dataset(dataset)
 reg = 0.01
-reg = 1e-5
+reg = 1e-2
 oracle = Logistic(X, Y, reg)
 print(X.shape, Y.shape)
 
 
 # In[11]:
-batch_size = 1000
+batch_size = 10000
 num_of_batches = int(X.shape[0] / batch_size)
 data_size = batch_size * num_of_batches
 X = X[:data_size, :]
@@ -765,9 +819,13 @@ init_w = np.random.randn(d, 1) / 10
 
 iqn = iqn_sol(oracles, max_L, w_opt, init_w, epochs=500)
 iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, epochs=200)
-sliqn = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=True, epochs=500)
+sliqn = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 iqn_sr1 = iqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=True, epochs=500)
 max_M = 1e-3
+grsr1 = grsr1_sol(oracles[0], init_w, max_L, epochs=200, w_opt=w_opt, ours=True, corr=False)
+# delete later
+max_L = oracles[0].L
+max_M = oracles[0].M
 iqn_greedy_sr1 = iqn_greedy_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 max_M = 0.05
 sliqn_sr1 = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=True, epochs=1000)
