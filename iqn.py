@@ -468,7 +468,7 @@ def iqn_sol(oracles, max_L,
     
     
 def iqs_sol(oracles, max_L, max_M,
-            w_opt, init_w, epochs=200):
+            w_opt, init_w, corr=False, epochs=200):
     N = len(oracles)
     Gs = []
     ws = []
@@ -492,16 +492,18 @@ def iqs_sol(oracles, max_L, max_M,
             s = w - ws[i]
             yy = cur_grad - grads[i]
             r = np.sqrt(s.T @ oracles[i].hes_vec(ws[i], s))
-            scale = 1 + max_M * r
-            scale = 1
+            if corr:
+                scale = 1 + max_M * r
+            else:
+                scale = 1
             scale_Hessian = scale * Gs[i]
             ind = np.argmax(np.diag(scale_Hessian) / oracles[i].hes_diag(w))
             gv = np.zeros([d, 1])
             gv[ind] = 1
             base_Hessian = oracles[i].hes(w)
             
-            stoc_Hessian = scale_Hessian + (base_Hessian@ gv)@(gv.T@base_Hessian) / (gv.T @ base_Hessian @gv) - \
-                           (scale_Hessian@ gv)@(gv.T@scale_Hessian) / (gv.T @ scale_Hessian @gv)
+            stoc_Hessian = scale_Hessian + (base_Hessian@ gv)@(gv.T@base_Hessian) / (gv.T @ base_Hessian @gv + 1e-30) - \
+                           (scale_Hessian@ gv)@(gv.T@scale_Hessian) / (gv.T @ scale_Hessian @gv + 1e-30)
             B = B + (stoc_Hessian - Gs[i]) / N
             u = u + (stoc_Hessian @ w - Gs[i] @ ws[i]) / N
             g = g + yy / N
@@ -537,20 +539,26 @@ def sliqn_sol(oracles, max_L, max_M,
     B = np.copy(Gs[0])
     u = Gs[0] @ ws[0]
     g = g / N
+    invG = np.eye(X.shape[1]) / max_L
     for _ in range(epochs):
+        r_max = 0
         for i in range(N):
-            w = np.linalg.pinv(B) @ (u - g)
+            #w = np.linalg.pinv(B) @ (u - g)
+            w = invG @ (u - g)
             cur_grad = oracles[i].grad(w)
             s = w - ws[i]
             yy = cur_grad - grads[i]
             r = np.sqrt(s.T @ oracles[i].hes_vec(ws[i], s))
+            
+            if r > r_max:
+                r_max = r
             
             if corr:
                 scale = 1. + max_M * r / 2.
             else:   
                 scale = 1.
                 
-            scale_Hessian = scale * scale * Gs[i]
+            scale_Hessian = Gs[i]
             scale_yy = scale * yy
             
             stoc_Hessian = scale_Hessian + scale_yy@scale_yy.T / (scale_yy.T@s) - \
@@ -560,13 +568,30 @@ def sliqn_sol(oracles, max_L, max_M,
             gv[ind] = 1
             base_Hessian = oracles[i].hes(w)
             
-            stoc_Hessian = stoc_Hessian + (base_Hessian@ gv)@(gv.T@base_Hessian) / (gv.T @ base_Hessian @gv) - \
+            stoc_Hessian_2 = stoc_Hessian + (base_Hessian@ gv)@(gv.T@base_Hessian) / (gv.T @ base_Hessian @gv) - \
                            (stoc_Hessian@ gv)@(gv.T@stoc_Hessian) / (gv.T @ stoc_Hessian @gv)
-            B = B + (stoc_Hessian - Gs[i]) / N
-            u = u + (stoc_Hessian @ w - Gs[i] @ ws[i]) / N
-            g = g + yy / N
-                        
-            Gs[i] = np.copy(stoc_Hessian)
+            
+            if i == N - 1 and corr:
+                scale = 1 + max_M * r_max / 2.
+                stoc_Hessian_2 = scale * scale * stoc_Hessian_2
+                B = B + (stoc_Hessian_2 - Gs[i]) / N
+                u = u + (stoc_Hessian_2 @ w - Gs[i] @ ws[i]) / N
+                g = g + yy / N    
+                for j in range(N - 1):
+                    B = B + (scale * scale - 1) / N * Gs[j]
+                    u = u + (scale * scale - 1) / N * (Gs[j] @ ws[j])
+                    Gs[j] = Gs[j] * scale * scale
+                invG = np.linalg.pinv(B)
+            else:
+                invG = invG - invG @ (base_Hessian @ gv) @ (gv.T @ base_Hessian) @ invG / (N * gv.T @ base_Hessian @ gv + gv.T @ base_Hessian @ invG @ base_Hessian @ gv)
+                invG = invG + invG @ (stoc_Hessian @ gv) @ (gv.T @ stoc_Hessian) @ invG / (N * gv.T @ stoc_Hessian @ gv - gv.T @ stoc_Hessian @ invG @ stoc_Hessian @ gv)
+                invG = invG - invG @ scale_yy @ scale_yy.T @ invG / (N * scale_yy.T @ s + scale_yy.T @ invG @ scale_yy)
+                invG = invG + invG @ (scale_Hessian @ s)@(s.T @ scale_Hessian) @ invG / (N * s.T @ Gs[i] @ s - s.T @ scale_Hessian @ invG @ scale_Hessian @ s)
+                B = B + (stoc_Hessian_2 - Gs[i]) / N
+                u = u + (stoc_Hessian_2 @ w - Gs[i] @ ws[i]) / N
+                g = g + yy / N
+            
+            Gs[i] = np.copy(stoc_Hessian_2)
             grads[i] = np.copy(cur_grad)
             ws[i] = np.copy(w)
             
@@ -592,9 +617,11 @@ def iqn_sr1_sol(oracles, max_L, max_M,
     B = np.copy(Gs[0])
     u = Gs[0] @ ws[0]
     g = g / N
+    invG = np.eye(X.shape[1]) / max_L
     for _ in range(epochs):
         for i in range(N):
-            w = np.linalg.pinv(B) @ (u - g)
+            #w = np.linalg.pinv(B) @ (u - g)
+            w = invG @ (u - g)
             cur_grad = oracles[i].grad(w)
             s = w - ws[i]
             yy = cur_grad - grads[i]
@@ -602,6 +629,7 @@ def iqn_sr1_sol(oracles, max_L, max_M,
             
             vec_diff = Gs[i] @ s - yy
             stoc_Hessian = Gs[i] - vec_diff @ vec_diff.T / (vec_diff.T @ s)
+            invG = invG + invG @ vec_diff @ vec_diff.T @ invG / (N * vec_diff.T @ s - vec_diff.T @ invG @ vec_diff) 
             
             B = B + (stoc_Hessian - Gs[i]) / N
             u = u + (stoc_Hessian @ w - Gs[i] @ ws[i]) / N
@@ -737,9 +765,12 @@ def sliqn_sr1_sol(oracles, max_L, max_M,
     B = np.copy(Gs[0])
     u = Gs[0] @ ws[0]
     g = g / N
+    invG = np.eye(X.shape[1]) / max_L
     for _ in range(epochs):
+        r_max = 0
         for i in range(N):
-            w = np.linalg.pinv(B) @ (u - g)
+            #w = np.linalg.pinv(B) @ (u - g)
+            w = invG @ (u - g)
             cur_grad = oracles[i].grad(w)
             s = w - ws[i]
             yy = cur_grad - grads[i]
@@ -749,8 +780,11 @@ def sliqn_sr1_sol(oracles, max_L, max_M,
                 scale = 1. + max_M * r / 2.
             else:   
                 scale = 1.
-                
-            scale_Hessian = scale * scale * Gs[i]
+            
+            if r >= r_max:
+                r_max = r
+            
+            scale_Hessian = Gs[i]   
             scale_yy = scale * yy
             
             vec_diff = scale_Hessian @ s - scale_yy
@@ -762,9 +796,24 @@ def sliqn_sr1_sol(oracles, max_L, max_M,
             
             Hessian_diff = stoc_Hessian - base_Hessian
             stoc_Hessian_2 = stoc_Hessian - Hessian_diff @ gv @ gv.T @ Hessian_diff / (gv.T @ Hessian_diff @ gv + 1e-30)
-            B = B + (stoc_Hessian_2 - Gs[i]) / N
-            u = u + (stoc_Hessian_2 @ w - Gs[i] @ ws[i]) / N
-            g = g + yy / N
+            
+            if i == N - 1 and corr:
+                scale = 1 + max_M * r_max / 2.
+                stoc_Hessian_2 = scale * scale * stoc_Hessian_2
+                B = B + (stoc_Hessian_2 - Gs[i]) / N
+                u = u + (stoc_Hessian_2 @ w - Gs[i] @ ws[i]) / N
+                g = g + yy / N    
+                for j in range(N - 1):
+                    B = B + (scale * scale - 1) / N * Gs[j]
+                    u = u + (scale * scale - 1) / N * (Gs[j] @ ws[j])
+                    Gs[j] = Gs[j] * scale * scale
+                invG = np.linalg.pinv(B)
+            else:
+                invG = invG + invG @ Hessian_diff @ gv @ gv.T @ Hessian_diff @ invG / (N * gv.T @ Hessian_diff @ gv - gv.T @ Hessian_diff @ invG @ Hessian_diff @ gv + 1e-30)
+                invG = invG + invG @ vec_diff @ vec_diff.T @ invG / (N * vec_diff.T @ s - vec_diff.T @ invG @ vec_diff + 1e-30)
+                B = B + (stoc_Hessian_2 - Gs[i]) / N
+                u = u + (stoc_Hessian_2 @ w - Gs[i] @ ws[i]) / N
+                g = g + yy / N
                         
             Gs[i] = np.copy(stoc_Hessian_2)
             grads[i] = np.copy(cur_grad)
@@ -785,13 +834,13 @@ def prepare_dataset(dataset):
 dataset = 'a6a' ## 'w8a', 'a6a', 'w6a'
 X, Y = prepare_dataset(dataset)
 reg = 0.01
-reg = 1e-3
+reg = 3e-1
 oracle = Logistic(X, Y, reg)
 print(X.shape, Y.shape)
 
 
 # In[11]:
-batch_size = 5000
+batch_size = 1000
 num_of_batches = int(X.shape[0] / batch_size)
 data_size = batch_size * num_of_batches
 X = X[:data_size, :]
@@ -820,19 +869,21 @@ max_M = 0.03
 init_w = np.random.randn(d, 1) / 10
 
 iqn = iqn_sol(oracles, max_L, w_opt, init_w, epochs=500)
-iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, epochs=200)
+#iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 sliqn = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
+max_L = 6e-2
+max_L = 6e-1
 iqn_sr1 = iqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
-max_L = 3
-max_M = 1e-3
+#max_L = 3
+#max_M = 1e-3
 #grsr1 = grsr1_sol(oracles[0], init_w, max_L, epochs=500, w_opt=w_opt, ours=True, corr=False)
 # delete later
-max_L = 1
+max_L = 1.2
 max_M = 1e-3
-iqn_greedy_sr1 = iqn_greedy_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=300)
+#iqn_greedy_sr1 = iqn_greedy_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=300)
 # working parameter L: 0.1 for bs 5000
-max_L = 1e-1
-max_L = 0.1
+max_L = 6e-2
+max_L = 6e-1
 max_M = 0.05
 sliqn_sr1 = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=1000)
 print(sliqn[300:500])
@@ -846,6 +897,7 @@ plt.plot(iqn[:500], '-', label='iqn', linewidth=2)
 plt.plot(sliqn[:500], '-.', label='sliqn', linewidth=2)
 #plt.plot(grsr1[:500], '--', label='grsr1', linewidth=2)
 plt.plot(iqn_sr1[:500], '--', label='iqn_sr1', linewidth=2)
+#plt.plot(iqs[:500], '_', label='iqs', linewidth=2)
 #plt.plot(iqn_greedy_sr1[:150], '.', label='iqn_greedy_sr1', linewidth=2)
 plt.plot(sliqn_sr1[:500], ':', label='sliqn_sr1', linewidth=2)
 ax.grid()
