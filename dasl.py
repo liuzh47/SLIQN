@@ -123,10 +123,8 @@ def iqn_sol(oracle, max_L,
                 q = data["q"]
                 alpha = data["alpha"]
                 beta = data["beta"]
-                if epo == 0:
-                    denom = step + 1
-                else:
-                    denom = size - 1
+
+                denom = size - 1
                 u = u + u_diff / denom
                 g = g + yy / denom
                 
