@@ -5,6 +5,8 @@ import sklearn.datasets
 import matplotlib.pyplot as plt
 import time
 import matplotlib
+import scipy.linalg
+from scipy.sparse import csr_matrix, linalg
 
 matplotlib.use('agg')
 np.random.seed(22556)
@@ -115,7 +117,7 @@ def iqn_sol(oracle, max_L,
             w = comm.recv(source=0, tag=weight_tag)
         else:
             for step in range(size - 1):
-                data = comm.recv(source=MPI.ANY_SOURCE, tag=weight_tag)
+                data = comm.recv(source=MPI.ANY_SOURCE, tag=update_tag)
                 u_diff = data["u_diff"]
                 yy = data["yy"]
                 q = data["q"]
@@ -137,7 +139,6 @@ def iqn_sol(oracle, max_L,
         comm.bcast(0, root=0)
         if rank == 0:
             res.append(np.linalg.norm(w - w_opt))
-            print(res)
     
     return res
     
@@ -163,8 +164,12 @@ if rank > 0:
             Y[(rank - 1)*batch_size:batch_size+(rank - 1)*batch_size, :], reg)
 
 init_w = np.random.randn(d, 1) / 10
+max_L = 0.1
+max_M = 0.03
 
-iqn = iqn_sol(oracles, max_L, w_opt, init_w, epochs=500)
+iqn = iqn_sol(oracle, max_L, w_opt, init_w, epochs=500)
+if rank == 0:
+    print(iqn)
 
 # passing MPI datatypes explicitly
 
