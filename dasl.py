@@ -65,16 +65,20 @@ def prepare_dataset(dataset):
         Y = 2 * Y - 1
     return X, Y
 
+
 def newton_sol(w, epoch):
     gw = oracle.grad(w)
     res = [np.linalg.norm(gw)]
+    warmup_ws = []
+    
     for i in range(epoch):
         w = w - np.linalg.pinv(oracle.hes(w)) @ oracle.grad(w)
         gw = oracle.grad(w)
 #         res.append(np.sqrt(gw.T @ np.linalg.pinv(oracle.hes(w)) @ gw)[0, 0])   
         res.append(np.linalg.norm(gw))  
         print(res[-1], oracle.f(w))
-    return res, w
+        warmup_ws.append(w)
+    return res, w, warmup_ws[2]
 
 update_tag = 11
 weight_tag = 15
@@ -318,13 +322,14 @@ print(size-1)
 
 d = oracle.d
 w = np.random.randn(d, 1) / 10
-res, w_opt = newton_sol(w, 20)
+res, w_opt,  warmup_w = newton_sol(w, 20)
 
 if rank > 0:
     oracle = Logistic(X[(rank - 1)*batch_size:batch_size+(rank-1)*batch_size,:], 
             Y[(rank - 1)*batch_size:batch_size+(rank - 1)*batch_size, :], reg)
 
-init_w = np.random.randn(d, 1) / 10
+#init_w = np.random.randn(d, 1) / 10
+init_w = warmup_w
 max_L = 0.1
 max_M = 0.03
 

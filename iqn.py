@@ -82,8 +82,8 @@ class Logistic:
 
 # In[9]:
 
-
 def newton_sol(w, epoch):
+    warmup_ws = []
     gw = oracle.grad(w)
     res = [np.linalg.norm(gw)]
     for i in range(epoch):
@@ -92,7 +92,8 @@ def newton_sol(w, epoch):
 #         res.append(np.sqrt(gw.T @ np.linalg.pinv(oracle.hes(w)) @ gw)[0, 0])   
         res.append(np.linalg.norm(gw))  
         print(res[-1], oracle.f(w))
-    return res, w
+        warmup_ws.append(w)
+    return res, w, warmup_ws[0]
 
 def rasr1_sol(w, G, epochs, corr=False):
     invG = np.linalg.pinv(G)
@@ -424,7 +425,7 @@ oracle = Logistic(X, Y, reg)
 d = oracle.d
 G = np.eye(d) * oracle.L
 w = np.random.randn(d, 1) / 10
-res, w_opt = newton_sol(w, 20)
+res, w_opt, warmup_w = newton_sol(w, 20)
 
 
 oracles = []
@@ -440,7 +441,8 @@ Ms = [o.M for o in oracles]
 max_L = 0.1
 max_M = 0.03
 
-init_w = np.random.randn(d, 1) / 10
+#init_w = np.random.randn(d, 1) / 10
+init_w = warmup_w
 
 iqn = iqn_sol(oracles, max_L, w_opt, init_w, epochs=500)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
