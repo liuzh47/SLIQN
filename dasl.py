@@ -246,7 +246,7 @@ def sliqn_sr1_sol(oracle, max_L, max_M,
         g = np.zeros_like(init_w)
         
     for epo in range(epochs):
-        gamma_k = max_M * np.sqrt(max_L) * np.linalg.norm(init_w - w_opt) * (1 - 1 /(d * kappa))** epo
+        gamma_k = max_M * np.sqrt(max_L) * np.linalg.norm(init_w - w_opt) * (1 - 1 /d)** epo
         if rank > 0:
             g = oracle.grad(w)
             s = w - w_old
@@ -329,20 +329,28 @@ max_L = 0.1
 max_M = 0.03
 
 iqn = iqn_sol(oracle, max_L, w_opt, init_w, epochs=500)
-if rank == 0:
-    print(iqn)
 
 max_L = 0.1
 max_M = 1e-8
 sliqn = sliqn_sol(oracle, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
-if rank == 0:
-    print(sliqn)
     
 max_L = 0.1
 max_M = 1e-8
 sliqn_sr1 = sliqn_sr1_sol(oracle, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
-if rank == 0:
-    print(sliqn_sr1)
+if rank == 0:  
+    fig, ax = plt.subplots(1, 1, figsize=(5, 4))
+    plt.plot(iqn[:500], '-', label='iqn', linewidth=2)
+    plt.plot(sliqn[:500], '-.', label='sliqn', linewidth=2)
+    plt.plot(sliqn_sr1[:500], '--', label='sliqn_sr1', linewidth=2)
+    ax.grid()
+    ax.legend()
+    ax.set_yscale('log')  
+    # plt.xscale('log')  
+    ax.set_ylabel('$\lambda_f(x_k)$')
+    ax.set_xlabel('Epochs, $n=500, \kappa=%d$'%(oracle.kappa))
+    ax.set_title('General Function Minimization')
+    plt.tight_layout()  
+    plt.savefig('dist-qn.pdf', format='pdf', bbox_inches='tight', dpi=300)
 # passing MPI datatypes explicitly
 
 
