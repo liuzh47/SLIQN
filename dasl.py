@@ -88,10 +88,10 @@ def iqn_sol(oracle, max_L,
         g_old = np.zeros_like(init_w)
         w_old = np.zeros_like(init_w)
         u_old = np.zeros_like(init_w)
-        w = init_w
+        w = np.copy(init_w)
         G = np.eye(d) * max_L
     else:
-        w = init_w
+        w = np.copy(init_w)
         invG = np.eye(d) / max_L
         u = np.zeros_like(init_w)
         g = np.zeros_like(init_w)
@@ -140,6 +140,169 @@ def iqn_sol(oracle, max_L,
     
     return res
     
+def sliqn_sol(oracle, max_L, max_M,
+            w_opt, init_w, corr=False, epochs=200):
+    res = []
+    d = oracle.d
+    kappa = oracle.kappa
+ 
+    if rank > 0:
+        g_old = np.zeros_like(init_w)
+        w_old = np.zeros_like(init_w)
+        u_old = np.zeros_like(init_w)
+        w = np.copy(init_w)
+        G = np.eye(d) * max_L
+    else:
+        w = np.copy(init_w)
+        invG = np.eye(d) / max_L
+        u = np.zeros_like(init_w)
+        g = np.zeros_like(init_w)
+        
+    for epo in range(epochs):
+        gamma_k = max_M * np.sqrt(max_L) * np.linalg.norm(init_w - w_opt) * (1 - 1 /(d * kappa))** epo
+        if rank > 0:
+            g = oracle.grad(w)
+            s = w - w_old
+            yy = g - g_old
+            scale_yy = (1 + gamma_k) * yy
+            scale_G = (1 + gamma_k) ** 2 * G
+            q = scale_G @ s
+            alpha = scale_yy.T @ s
+            beta = s.T @ scale_G @ s
+            G_1 = scale_G + scale_yy @ scale_yy.T / alpha - q @ q.T / beta
+            
+            ind = np.argmax(np.diag(G_1) / oracle.hes_diag(w))
+            gv = np.zeros([d, 1]) 
+            gv[ind] = 1
+            base_Hessian = oracle.hes(w)
+            alpha_1 = gv.T @ base_Hessian @ gv
+            beta_1 = gv.T @ G_1 @ gv
+            y_1 = base_Hessian @ gv
+            q_1 = G_1 @ gv
+            G = G_1 + y_1 @ y_1.T / alpha_1 - q_1 @ q_1.T / beta_1
+            
+            u = G @ w
+            u_diff = u - u_old
+            w_old = w
+            g_old = g
+            u_old = u
+            data = {"u_diff": u_diff, "yy":yy, "scale_yy":scale_yy, "q":q, 
+                    "alpha":alpha, "beta":beta, "y_1":y_1, "q_1":q_1,
+                    "alpha_1":alpha_1, "beta_1":beta_1, "client_id": rank}
+            comm.send(data, dest=0, tag=update_tag)
+            w = comm.recv(source=0, tag=weight_tag)
+        else:
+            invG = invG / (1 + gamma_k) ** 2
+            for step in range(size - 1):
+                data = comm.recv(source=MPI.ANY_SOURCE, tag=update_tag)
+                u_diff = data["u_diff"]
+                yy = data["yy"]
+                scale_yy = data["scale_yy"]
+                q = data["q"]
+                alpha = data["alpha"]
+                beta = data["beta"]
+                y_1 = data["y_1"]
+                q_1 = data["q_1"]
+                alpha_1 = data["alpha_1"]
+                beta_1 = data["beta_1"]
+
+                denom = size - 1
+                u = u + u_diff / denom
+                g = g + yy / denom
+                
+                v = invG @ y_1
+                U = invG - v @ v.T / (denom * alpha_1 + v.T @ y_1)
+                z = U @ q_1
+                U_1 = U + z @ z.T / (denom * beta_1 - q_1.T @ z)
+                v_1 = U_1 @ scale_yy
+                U_2 = U_1 - v_1 @ v_1.T / (denom * alpha + v_1.T @ scale_yy)
+                z_1 = U_2 @ q
+                invG = U_2 + z_1 @ z_1.T / (denom * beta - q.T @ z_1)
+                
+                w = invG @ (u - g)
+                comm.send(w, dest=data["client_id"], tag=weight_tag)
+        comm.bcast(0, root=0)
+        if rank == 0:
+            res.append(np.linalg.norm(w - w_opt))
+    
+    return res
+
+def sliqn_sr1_sol(oracle, max_L, max_M,
+            w_opt, init_w, corr=False, epochs=200):
+    res = []
+    d = oracle.d
+    kappa = oracle.kappa
+ 
+    if rank > 0:
+        g_old = np.zeros_like(init_w)
+        w_old = np.zeros_like(init_w)
+        u_old = np.zeros_like(init_w)
+        w = np.copy(init_w)
+        G = np.eye(d) * max_L
+    else:
+        w = np.copy(init_w)
+        invG = np.eye(d) / max_L
+        u = np.zeros_like(init_w)
+        g = np.zeros_like(init_w)
+        
+    for epo in range(epochs):
+        gamma_k = max_M * np.sqrt(max_L) * np.linalg.norm(init_w - w_opt) * (1 - 1 /(d * kappa))** epo
+        if rank > 0:
+            g = oracle.grad(w)
+            s = w - w_old
+            yy = g - g_old
+            scale_yy = (1 + gamma_k) * yy
+            scale_G = (1 + gamma_k) ** 2 * G
+            q = scale_G @ s - scale_yy
+            alpha = q.T @ s
+            G_1 = scale_G - q @ q.T / (alpha + 1e-30)
+            ind = np.argmax(np.diag(G_1) - oracle.hes_diag(w))
+            gv = np.zeros([d, 1]) 
+            gv[ind] = 1
+            base_Hessian = oracle.hes(w)
+            
+            q_1 = (G_1 - base_Hessian) @ gv
+            alpha_1 = q_1.T @ gv
+            G = G_1  - q_1 @ q_1.T / (alpha_1 + 1e-30)
+            
+            u = G @ w
+            u_diff = u - u_old
+            w_old = w
+            g_old = g
+            u_old = u
+            data = {"u_diff": u_diff, "yy":yy,  "q":q, 
+                    "alpha":alpha, "q_1":q_1,
+                    "alpha_1":alpha_1, "client_id": rank}
+            comm.send(data, dest=0, tag=update_tag)
+            w = comm.recv(source=0, tag=weight_tag)
+        else:
+            invG = invG / (1 + gamma_k) ** 2
+            for step in range(size - 1):
+                data = comm.recv(source=MPI.ANY_SOURCE, tag=update_tag)
+                u_diff = data["u_diff"]
+                yy = data["yy"]
+                q = data["q"]
+                alpha = data["alpha"]
+                q_1 = data["q_1"]
+                alpha_1 = data["alpha_1"]
+
+                denom = size - 1
+                u = u + u_diff / denom
+                g = g + yy / denom
+                
+                v = invG @ q_1
+                U = invG + v @ v.T / (denom * alpha_1 - v.T @ q_1)
+                z = U @ q
+                invG = U + z @ z.T / (denom * alpha - z.T @ q)
+                
+                w = invG @ (u - g)
+                comm.send(w, dest=data["client_id"], tag=weight_tag)
+        comm.bcast(0, root=0)
+        if rank == 0:
+            res.append(np.linalg.norm(w - w_opt))
+    
+    return res
+
 
 dataset = 'a6a' ## 'w8a', 'a6a', 'w6a'
 X, Y = prepare_dataset(dataset)
@@ -169,6 +332,17 @@ iqn = iqn_sol(oracle, max_L, w_opt, init_w, epochs=500)
 if rank == 0:
     print(iqn)
 
+max_L = 0.1
+max_M = 1e-8
+sliqn = sliqn_sol(oracle, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
+if rank == 0:
+    print(sliqn)
+    
+max_L = 0.1
+max_M = 1e-8
+sliqn_sr1 = sliqn_sr1_sol(oracle, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
+if rank == 0:
+    print(sliqn_sr1)
 # passing MPI datatypes explicitly
 
 
