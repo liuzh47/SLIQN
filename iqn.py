@@ -406,7 +406,7 @@ def prepare_dataset(dataset):
     if np.min(Y) != -1:
         Y = 2 * Y - 1
     return X, Y
-dataset = 'a9a' ## 'w8a', 'a6a', 'a9a', 'mushrooms', 'ijcnn1'
+dataset = 'w8a' ## 'w8a', 'a6a', 'a9a', 'mushrooms', 'ijcnn1'
 X, Y = prepare_dataset(dataset)
 reg = 0.01
 reg = 1
