@@ -78,7 +78,7 @@ def newton_sol(w, epoch):
         res.append(np.linalg.norm(gw))  
         print(res[-1], oracle.f(w))
         warmup_ws.append(w)
-    return res, w, warmup_ws[1]
+    return res, w, warmup_ws[2]
 
 update_tag = 11
 weight_tag = 15
@@ -308,7 +308,7 @@ def sliqn_sr1_sol(oracle, max_L, max_M,
     return res
 
 
-dataset = 'w8a' ## 'w8a', 'a9a', 'w6a', 'mushrooms', 'ijcnn1'
+dataset = 'mushrooms' ## 'w8a', 'a9a', 'w6a', 'mushrooms', 'ijcnn1'
 X, Y = prepare_dataset(dataset)
 n = X.shape[0]
 batch_size = n // (size - 1)
@@ -316,7 +316,7 @@ n = batch_size * (size - 1)
 X = X[:n, :]
 Y = Y[:n, :]
 reg = 0.01
-reg = 4e-1
+reg = 3e-1
 oracle = Logistic(X, Y, reg)
 print(size-1)
 
@@ -339,7 +339,7 @@ max_L = 0.1
 max_M = 1e-8
 sliqn = sliqn_sol(oracle, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
     
-max_L = 0.1
+max_L = 5e-1
 max_M = 1e-8
 sliqn_sr1 = sliqn_sr1_sol(oracle, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 if rank == 0:  
