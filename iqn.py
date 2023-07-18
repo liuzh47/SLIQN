@@ -406,7 +406,7 @@ def prepare_dataset(dataset):
     if np.min(Y) != -1:
         Y = 2 * Y - 1
     return X, Y
-dataset = 'a6a' ## 'w8a', 'a6a', 'w6a'
+dataset = 'ijcnn1' ## 'w8a', 'a6a', 'a9a', 'mushrooms', 'ijcnn1'
 X, Y = prepare_dataset(dataset)
 reg = 0.01
 reg = 3e-1
@@ -444,30 +444,30 @@ max_M = 0.03
 #init_w = np.random.randn(d, 1) / 10
 init_w = warmup_w
 
-iqn = iqn_sol(oracles, max_L, w_opt, init_w, epochs=500)
+iqn = iqn_sol(oracles, max_L, w_opt, init_w, epochs=300)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 max_L = 0.1
 max_M = 1e-8
-sliqn = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
+sliqn = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=300)
 max_L = 6e-2
 max_L = 6e-1
-iqn_sr1 = iqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
+iqn_sr1 = iqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=300)
 
 max_L = 6e-2
 max_L = 6e-1
 max_M = 1e-8
-sliqn_sr1 = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=1000)
+sliqn_sr1 = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=300)
 
 fig, ax = plt.subplots(1, 1, figsize=(5, 4))
 # plt.plot(grsr1v1, '--', label='GrSR1v1')
 # plt.plot(grsr1v2, '-', label='GrSR1v2')
-plt.plot(iqn[:500], '-', label='iqn', linewidth=2)
-plt.plot(sliqn[:500], '-.', label='sliqn', linewidth=2)
+plt.plot(iqn[:300], '-', label='iqn', linewidth=2)
+plt.plot(sliqn[:300], '-.', label='sliqn', linewidth=2)
 #plt.plot(grsr1[:500], '--', label='grsr1', linewidth=2)
-plt.plot(iqn_sr1[:500], '--', label='iqn_sr1', linewidth=2)
+plt.plot(iqn_sr1[:300], '--', label='iqn_sr1', linewidth=2)
 #plt.plot(iqs[:500], '_', label='iqs', linewidth=2)
 #plt.plot(iqn_greedy_sr1[:150], '.', label='iqn_greedy_sr1', linewidth=2)
-plt.plot(sliqn_sr1[:500], ':', label='sliqn_sr1', linewidth=2)
+plt.plot(sliqn_sr1[:300], ':', label='sliqn_sr1', linewidth=2)
 ax.grid()
 ax.legend()
 ax.set_yscale('log')  
@@ -475,5 +475,6 @@ ax.set_yscale('log')
 ax.set_ylabel('$\lambda_f(x_k)$')
 ax.set_xlabel('Epochs, $n=500, \kappa=%d$'%(oracles[0].kappa))
 ax.set_title('General Function Minimization')
-plt.tight_layout()  
-plt.savefig('sliqn-sr1-bfgs.pdf', format='pdf', bbox_inches='tight', dpi=300)
+plt.tight_layout()
+plt_name = "sliqn_"+ dataset + ".pdf"
+plt.savefig(plt_name, format='pdf', bbox_inches='tight', dpi=300)

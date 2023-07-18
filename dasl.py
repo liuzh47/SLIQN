@@ -308,7 +308,7 @@ def sliqn_sr1_sol(oracle, max_L, max_M,
     return res
 
 
-dataset = 'a6a' ## 'w8a', 'a6a', 'w6a'
+dataset = 'ijcnn1' ## 'w8a', 'a9a', 'w6a', 'mushrooms', 'ijcnn1'
 X, Y = prepare_dataset(dataset)
 n = X.shape[0]
 batch_size = n // (size - 1)
@@ -355,7 +355,8 @@ if rank == 0:
     ax.set_xlabel('Epochs, $n=500, \kappa=%d$'%(oracle.kappa))
     ax.set_title('General Function Minimization')
     plt.tight_layout()  
-    plt.savefig('dist-qn.pdf', format='pdf', bbox_inches='tight', dpi=300)
+    plt_name = 'dist-qn_' + dataset + ".pdf"
+    plt.savefig(plt_name, format='pdf', bbox_inches='tight', dpi=300)
 # passing MPI datatypes explicitly
 
 
