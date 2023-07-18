@@ -308,7 +308,7 @@ def sliqn_sr1_sol(oracle, max_L, max_M,
     return res
 
 
-dataset = 'mushrooms' ## 'w8a', 'a9a', 'w6a', 'mushrooms', 'ijcnn1'
+dataset = 'ijcnn1' ## 'w8a', 'a9a', 'w6a', 'mushrooms', 'ijcnn1'
 X, Y = prepare_dataset(dataset)
 n = X.shape[0]
 batch_size = n // (size - 1)
@@ -316,7 +316,7 @@ n = batch_size * (size - 1)
 X = X[:n, :]
 Y = Y[:n, :]
 reg = 0.01
-reg = 3e-1
+reg = 1e-3
 oracle = Logistic(X, Y, reg)
 print(size-1)
 
@@ -330,16 +330,16 @@ if rank > 0:
 
 #init_w = np.random.randn(d, 1) / 10
 init_w = warmup_w
-max_L = 0.1
+max_L = 3e-1
 max_M = 0.03
 
 iqn = iqn_sol(oracle, max_L, w_opt, init_w, epochs=500)
 
-max_L = 0.1
+max_L = 3e-1
 max_M = 1e-8
 sliqn = sliqn_sol(oracle, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
     
-max_L = 5e-1
+max_L = 3e-1
 max_M = 1e-8
 sliqn_sr1 = sliqn_sr1_sol(oracle, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 if rank == 0:  

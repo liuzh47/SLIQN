@@ -93,7 +93,7 @@ def newton_sol(w, epoch):
         res.append(np.linalg.norm(gw))  
         print(res[-1], oracle.f(w))
         warmup_ws.append(w)
-    return res, w, warmup_ws[1]
+    return res, w, warmup_ws[0]
 
 def rasr1_sol(w, G, epochs, corr=False):
     invG = np.linalg.pinv(G)
@@ -406,10 +406,10 @@ def prepare_dataset(dataset):
     if np.min(Y) != -1:
         Y = 2 * Y - 1
     return X, Y
-dataset = 'mushrooms' ## 'w8a', 'a6a', 'a9a', 'mushrooms', 'ijcnn1'
+dataset = 'ijcnn1' ## 'w8a', 'a6a', 'a9a', 'mushrooms', 'ijcnn1'
 X, Y = prepare_dataset(dataset)
 reg = 0.01
-reg = 3e-1
+reg = 5e-1
 oracle = Logistic(X, Y, reg)
 print(X.shape, Y.shape)
 
@@ -454,7 +454,7 @@ max_L = 6e-1
 iqn_sr1 = iqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=300)
 
 max_L = 6e-2
-max_L = 6e-1
+max_L = 5e-1
 max_M = 1e-8
 sliqn_sr1 = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=300)
 
