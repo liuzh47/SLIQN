@@ -95,61 +95,13 @@ def newton_sol(w, epoch):
         warmup_ws.append(w)
     return res, w, warmup_ws[0]
 
-def rasr1_sol(w, G, epochs, corr=False):
-    invG = np.linalg.pinv(G)
-    gw = oracle.grad(w)
-    res = [np.linalg.norm(gw)]
-    for i in range(epochs):
-        dw = - invG @ gw
-        if corr:
-            r = np.sqrt(dw.T @ oracle.hes_vec(w, dw))
-            invG = invG / (1 + oracle.M * r) # proposed by authors
-        w = w + dw
-        u = np.random.randn(d, 1)
-        v = invG @ oracle.hes_vec(w, u)
-        invG = invG + (u - v) @ (u - v).T / (u.T @ oracle.hes_vec(w, u-v) + 1e-30) 
-        gw = oracle.grad(w)
-#         res.append(np.sqrt(gw.T @ np.linalg.pinv(oracle.hes(w)) @ gw)[0, 0])
-        res.append(np.linalg.norm(gw))
-    print(res[-1])    
-    return res
-
-def grsr1_sol(w, G, epochs, ours=True, corr=False):
-    gw = oracle.grad(w)
-    res = [np.linalg.norm(gw)]
-    invG = np.linalg.pinv(G)
-    for i in range(epochs):
-        dw = - invG @ gw
-        if corr:
-            r = np.sqrt(dw.T @ oracle.hes_vec(w, dw))
-            G = G * (1 + oracle.M * r)
-            invG = invG / (1 + oracle.M * r)
-        w = w + dw    
-        if ours:  
-            ind = np.argmax(np.diag(G) - oracle.hes_diag(w))
-        else:    
-            ind = np.argmax(np.diag(G) / oracle.hes_diag(w))
-        u = np.zeros([d, 1])
-        u[ind] = 1
-    
-        Gu = G @ u
-        Au = oracle.hes_vec(w, u)
-        G = G - (Gu - Au) @ (Gu - Au).T / (u.T @ (Gu - Au) + 1e-30)
-        
-        v = invG @ Au
-        invG = invG + (u - v) @ (u - v).T / (u.T @ oracle.hes_vec(w, u-v) + 1e-30) 
-        gw = oracle.grad(w)
-        res.append(np.linalg.norm(gw))
-    print(res[-1])
-    return res
-
-
 def iqn_sol(oracles, max_L, 
             w_opt, init_w, epochs=200):
     N = len(oracles)
     Gs = []
     ws = []
     grads = []
+    ts = []
     
     g = np.zeros_like(init_w)
     for i in range(N):
@@ -163,6 +115,7 @@ def iqn_sol(oracles, max_L,
     u = Gs[0] @ ws[0]
     g = g / N
     invG = np.eye(d) / max_L
+    init_time = time.time()
     for _ in range(epochs):
         for i in range(N):
             w = invG @ (u - g)
@@ -184,8 +137,9 @@ def iqn_sol(oracles, max_L,
             ws[i] = np.copy(w)
             
         res.append(np.linalg.norm(ws[-1] - w_opt))
+        ts.append(time.time() - init_time)
         
-    return res
+    return res, ts
     
     
 def iqs_sol(oracles, max_L, max_M,
@@ -246,6 +200,7 @@ def sliqn_sol(oracles, max_L, max_M,
     grads = []
     d = oracles[0].d
     kappa = oracles[0].kappa
+    ts = []
     
     g = np.zeros_like(init_w)
     for i in range(N):
@@ -259,6 +214,7 @@ def sliqn_sol(oracles, max_L, max_M,
     u = Gs[0] @ ws[0]
     g = g / N
     invG = np.eye(X.shape[1]) / max_L
+    init_time = time.time()
     for epo in range(epochs):
         gamma_k = max_M * np.sqrt(max_L) * np.linalg.norm(init_w - w_opt) * (1 - 1 /(d * kappa))** epo
         invG = invG / (1 + gamma_k)**2
@@ -295,8 +251,9 @@ def sliqn_sol(oracles, max_L, max_M,
             ws[i] = np.copy(w)
             
         res.append(np.linalg.norm(ws[-1] - w_opt))
+        ts.append(time.time() - init_time)
         
-    return res
+    return res, ts
 
 def iqn_sr1_sol(oracles, max_L, max_M,
             w_opt, init_w, corr=False, epochs=200):
@@ -304,6 +261,7 @@ def iqn_sr1_sol(oracles, max_L, max_M,
     Gs = []
     ws = []
     grads = []
+    ts = []
     
     g = np.zeros_like(init_w)
     for i in range(N):
@@ -317,6 +275,7 @@ def iqn_sr1_sol(oracles, max_L, max_M,
     u = Gs[0] @ ws[0]
     g = g / N
     invG = np.eye(X.shape[1]) / max_L
+    init_time = time.time()
     for _ in range(epochs):
         for i in range(N):
             #w = np.linalg.pinv(B) @ (u - g)
@@ -339,8 +298,9 @@ def iqn_sr1_sol(oracles, max_L, max_M,
             ws[i] = np.copy(w)
             
         res.append(np.linalg.norm(ws[-1] - w_opt))
+        ts.append(time.time() - init_time)
         
-    return res
+    return res, ts
 
 def sliqn_sr1_sol(oracles, max_L, max_M,
             w_opt, init_w, corr=False, epochs=200):
@@ -349,6 +309,7 @@ def sliqn_sr1_sol(oracles, max_L, max_M,
     ws = []
     grads = []
     d = oracles[0].d
+    ts = []
     
     g = np.zeros_like(init_w)
     for i in range(N):
@@ -362,6 +323,7 @@ def sliqn_sr1_sol(oracles, max_L, max_M,
     u = Gs[0] @ ws[0]
     g = g / N
     invG = np.eye(X.shape[1]) / max_L
+    init_time = time.time()
     for epo in range(epochs):
         gamma_k = max_M * np.sqrt(max_L) * np.linalg.norm(init_w - w_opt) * (1 - 1 /d)** epo
         invG = invG / (1 + gamma_k)**2
@@ -395,8 +357,9 @@ def sliqn_sr1_sol(oracles, max_L, max_M,
             ws[i] = np.copy(w)
             
         res.append(np.linalg.norm(ws[-1] - w_opt))
+        ts.append(time.time() - init_time)
         
-    return res
+    return res, ts
 
 def prepare_dataset(dataset):
     X, Y = sklearn.datasets.load_svmlight_file('./data/libsvm/'+dataset+'.txt')
@@ -444,30 +407,27 @@ max_M = 0.03
 #init_w = np.random.randn(d, 1) / 10
 init_w = warmup_w
 
-iqn = iqn_sol(oracles, max_L, w_opt, init_w, epochs=300)
+iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=10)
+
+iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=300)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 max_L = 0.1
 max_M = 1e-8
-sliqn = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=300)
+sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=300)
 max_L = 6e-2
 max_L = 6e-1
-iqn_sr1 = iqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=300)
+iqn_sr1, iqn_sr1_ts = iqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=300)
 
 max_L = 6e-2
 max_L = 5e-1
 max_M = 1e-8
-sliqn_sr1 = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=300)
+sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=300)
 
 fig, ax = plt.subplots(1, 1, figsize=(5, 4))
-# plt.plot(grsr1v1, '--', label='GrSR1v1')
-# plt.plot(grsr1v2, '-', label='GrSR1v2')
-plt.plot(iqn[:300], '-', label='iqn', linewidth=2)
-plt.plot(sliqn[:300], '-.', label='sliqn', linewidth=2)
-#plt.plot(grsr1[:500], '--', label='grsr1', linewidth=2)
-plt.plot(iqn_sr1[:300], '--', label='iqn_sr1', linewidth=2)
-#plt.plot(iqs[:500], '_', label='iqs', linewidth=2)
-#plt.plot(iqn_greedy_sr1[:150], '.', label='iqn_greedy_sr1', linewidth=2)
-plt.plot(sliqn_sr1[:300], ':', label='sliqn_sr1', linewidth=2)
+plt.plot(iqn[:10], '-', label='iqn', linewidth=2)
+plt.plot(sliqn[:10], '-.', label='sliqn', linewidth=2)
+plt.plot(iqn_sr1[:10], '--', label='iqn_sr1', linewidth=2)
+plt.plot(sliqn_sr1[:10], ':', label='sliqn_sr1', linewidth=2)
 ax.grid()
 ax.legend()
 ax.set_yscale('log')  
@@ -477,4 +437,21 @@ ax.set_xlabel('Epochs, $n=500, \kappa=%d$'%(oracles[0].kappa))
 ax.set_title('General Function Minimization')
 plt.tight_layout()
 plt_name = "sliqn_"+ dataset + ".pdf"
+plt.savefig(plt_name, format='pdf', bbox_inches='tight', dpi=300)
+
+
+fig, ax = plt.subplots(1, 1, figsize=(5, 4))
+plt.plot(iqn_ts[:10], iqn[:10], '-', label='iqn', linewidth=2)
+plt.plot(sliqn_ts[:10], sliqn[:10], '-.', label='sliqn', linewidth=2)
+plt.plot(iqn_sr1_ts[:10], iqn_sr1[:10], '--', label='iqn_sr1', linewidth=2)
+plt.plot(sliqn_sr1_ts[:10], sliqn_sr1[:10], ':', label='sliqn_sr1', linewidth=2)
+ax.grid()
+ax.legend()
+ax.set_yscale('log')  
+# plt.xscale('log')  
+ax.set_ylabel('$\lambda_f(x_k)$')
+ax.set_xlabel('Seconds, $n=500, \kappa=%d$'%(oracles[0].kappa))
+ax.set_title('General Function Minimization')
+plt.tight_layout()
+plt_name = "sliqn_"+ dataset + "_time.pdf"
 plt.savefig(plt_name, format='pdf', bbox_inches='tight', dpi=300)

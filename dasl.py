@@ -87,6 +87,7 @@ def iqn_sol(oracle, max_L,
             w_opt, init_w, epochs=200):
     res = []
     d = oracle.d
+    ts = []
  
     if rank > 0:
         g_old = np.zeros_like(init_w)
@@ -99,6 +100,7 @@ def iqn_sol(oracle, max_L,
         invG = np.eye(d) / max_L
         u = np.zeros_like(init_w)
         g = np.zeros_like(init_w)
+        init_time = time.time()
         
     for epo in range(epochs):
         if rank > 0:
@@ -141,12 +143,14 @@ def iqn_sol(oracle, max_L,
         comm.bcast(0, root=0)
         if rank == 0:
             res.append(np.linalg.norm(w - w_opt))
+            ts.append(time.time() - init_time)
     
-    return res
+    return res, ts
     
 def sliqn_sol(oracle, max_L, max_M,
             w_opt, init_w, corr=False, epochs=200):
     res = []
+    ts = []
     d = oracle.d
     kappa = oracle.kappa
  
@@ -161,6 +165,7 @@ def sliqn_sol(oracle, max_L, max_M,
         invG = np.eye(d) / max_L
         u = np.zeros_like(init_w)
         g = np.zeros_like(init_w)
+        init_time = time.time()
         
     for epo in range(epochs):
         gamma_k = max_M * np.sqrt(max_L) * np.linalg.norm(init_w - w_opt) * (1 - 1 /(d * kappa))** epo
@@ -228,12 +233,14 @@ def sliqn_sol(oracle, max_L, max_M,
         comm.bcast(0, root=0)
         if rank == 0:
             res.append(np.linalg.norm(w - w_opt))
+            ts.append(time.time() - init_time)
     
-    return res
+    return res, ts
 
 def sliqn_sr1_sol(oracle, max_L, max_M,
             w_opt, init_w, corr=False, epochs=200):
     res = []
+    ts = []
     d = oracle.d
     kappa = oracle.kappa
  
@@ -248,6 +255,7 @@ def sliqn_sr1_sol(oracle, max_L, max_M,
         invG = np.eye(d) / max_L
         u = np.zeros_like(init_w)
         g = np.zeros_like(init_w)
+        init_time = time.time()
         
     for epo in range(epochs):
         gamma_k = max_M * np.sqrt(max_L) * np.linalg.norm(init_w - w_opt) * (1 - 1 /d)** epo
@@ -304,8 +312,9 @@ def sliqn_sr1_sol(oracle, max_L, max_M,
         comm.bcast(0, root=0)
         if rank == 0:
             res.append(np.linalg.norm(w - w_opt))
+            ts.append(time.time() - init_time)
     
-    return res
+    return res, ts
 
 
 dataset = 'ijcnn1' ## 'w8a', 'a9a', 'w6a', 'mushrooms', 'ijcnn1'
@@ -333,20 +342,22 @@ init_w = warmup_w
 max_L = 3e-1
 max_M = 0.03
 
-iqn = iqn_sol(oracle, max_L, w_opt, init_w, epochs=500)
+iqn, iqn_ts = iqn_sol(oracle, max_L, w_opt, init_w, epochs=30)
+
+iqn, iqn_ts = iqn_sol(oracle, max_L, w_opt, init_w, epochs=500)
 
 max_L = 3e-1
 max_M = 1e-8
-sliqn = sliqn_sol(oracle, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
+sliqn, sliqn_ts = sliqn_sol(oracle, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
     
 max_L = 3e-1
 max_M = 1e-8
-sliqn_sr1 = sliqn_sr1_sol(oracle, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
+sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracle, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 if rank == 0:  
     fig, ax = plt.subplots(1, 1, figsize=(5, 4))
-    plt.plot(iqn[:500], '-', label='iqn', linewidth=2)
-    plt.plot(sliqn[:500], '-.', label='sliqn', linewidth=2)
-    plt.plot(sliqn_sr1[:500], '--', label='sliqn_sr1', linewidth=2)
+    plt.plot(iqn[:50], '-', label='iqn', linewidth=2)
+    plt.plot(sliqn[:50], '-.', label='sliqn', linewidth=2)
+    plt.plot(sliqn_sr1[:50], '--', label='sliqn_sr1', linewidth=2)
     ax.grid()
     ax.legend()
     ax.set_yscale('log')  
@@ -356,6 +367,21 @@ if rank == 0:
     ax.set_title('General Function Minimization')
     plt.tight_layout()  
     plt_name = 'dist-qn_' + dataset + ".pdf"
+    plt.savefig(plt_name, format='pdf', bbox_inches='tight', dpi=300)
+    
+    fig, ax = plt.subplots(1, 1, figsize=(5, 4))
+    plt.plot(iqn_ts[:50], iqn[:50], '-', label='iqn', linewidth=2)
+    plt.plot(sliqn_ts[:50], sliqn[:50], '-.', label='sliqn', linewidth=2)
+    plt.plot(sliqn_sr1_ts[:50], sliqn_sr1[:50], '--', label='sliqn_sr1', linewidth=2)
+    ax.grid()
+    ax.legend()
+    ax.set_yscale('log')  
+    # plt.xscale('log')  
+    ax.set_ylabel('$\lambda_f(x_k)$')
+    ax.set_xlabel('Seconds, $n=500, \kappa=%d$'%(oracle.kappa))
+    ax.set_title('General Function Minimization')
+    plt.tight_layout()  
+    plt_name = 'dist-qn_' + dataset + "_time.pdf"
     plt.savefig(plt_name, format='pdf', bbox_inches='tight', dpi=300)
 # passing MPI datatypes explicitly
 
