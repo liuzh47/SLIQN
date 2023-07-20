@@ -13,6 +13,7 @@ import sklearn.datasets
 import scipy.sparse as sparse
 from scipy.sparse import csr_matrix, linalg
 import time
+import heapq
 
 import matplotlib
 matplotlib.use("agg")
@@ -73,6 +74,11 @@ class Logistic:
         pred = self.Y * (self.X @ w)
         p = 0.5 * (1 + np.tanh(-0.5 * pred))
         return self.X.T @ (self.X * p * (1-p)) / self.N + self.μ * np.eye(self.d)
+        
+    def hesU(self, w, U):
+            pred = self.Y * (self.X @ w)
+            p = 0.5 * (1 + np.tanh(-0.5 * pred))
+            return self.X.T@(self.X*p*(1-p)@U)/self.N+self.μ*U
     
     def hes_diag(self, w):
         pred = self.Y * (self.X @ w)
@@ -360,6 +366,67 @@ def sliqn_sr1_sol(oracles, max_L, max_M,
         ts.append(time.time() - init_time)
         
     return res, ts
+    
+def sliqn_srk_sol(oracles, max_L, max_M, tau,
+            w_opt, init_w, corr=False, epochs=200):
+    N = len(oracles)
+    Gs = []
+    ws = []
+    grads = []
+    d = oracles[0].d
+    ts = []
+    I = np.eye(d)
+    
+    g = np.zeros_like(init_w)
+    for i in range(N):
+        Gs.append(np.eye(X.shape[1]) * max_L)
+        ws.append(np.copy(init_w))
+        grads.append(oracles[i].grad(init_w))
+        g = g + grads[-1]        
+    res = [np.linalg.norm(ws[-1] - w_opt)]
+    w = np.copy(init_w)
+    B = np.copy(Gs[0])
+    u = Gs[0] @ ws[0]
+    g = g / N
+    invG = np.eye(X.shape[1]) / max_L
+    init_time = time.time()
+    for epo in range(epochs):
+        gamma_k = max_M * np.sqrt(max_L) * np.linalg.norm(init_w - w_opt) * (1 - tau /d)** epo
+        invG = invG / (1 + gamma_k)**2
+        for i in range(N):
+            w = invG @ (u - g)
+            cur_grad = oracles[i].grad(w)
+            s = w - ws[i]
+            yy = cur_grad - grads[i]
+            
+            scale_Hessian = (1 + gamma_k)**2 * Gs[i]   
+            scale_yy = (1 + gamma_k) * yy
+            
+            vec_diff = scale_Hessian @ s - scale_yy
+            stoc_Hessian = scale_Hessian - vec_diff @ vec_diff.T / (vec_diff.T @ s + 1e-30)
+            base_Hessian = oracles[i].hes(w)
+            inds = heapq.nlargest(tau, range(d), list(np.diag(stoc_Hessian) - oracles[i].hes_diag(w)).__getitem__ )
+            U = I[:, inds]
+            GU = stoc_Hessian @ U
+            AU = oracles[i].hesU(w, U)
+            DU = GU - AU
+            stoc_Hessian_2 = stoc_Hessian - DU @ np.linalg.inv(U.T @ DU + 1e-20*np.eye(tau)) @ DU.T
+            V = invG @ AU
+            Delta = U - V
+            invG = invG + Delta @ ((np.linalg.inv(N * U.T @ DU - DU.T@(Delta)+1e-20*np.eye(tau)))@Delta.T )
+            invG = invG + invG @ vec_diff @ vec_diff.T @ invG / (N * vec_diff.T @ s - vec_diff.T @ invG @ vec_diff + 1e-30)
+            B = B + (stoc_Hessian_2 - Gs[i]) / N
+            u = u + (stoc_Hessian_2 @ w - Gs[i] @ ws[i]) / N
+            g = g + yy / N
+                        
+            Gs[i] = np.copy(stoc_Hessian_2)
+            grads[i] = np.copy(cur_grad)
+            ws[i] = np.copy(w)
+            
+        res.append(np.linalg.norm(ws[-1] - w_opt))
+        ts.append(time.time() - init_time)
+        
+    return res, ts
 
 def prepare_dataset(dataset):
     X, Y = sklearn.datasets.load_svmlight_file('./data/libsvm/'+dataset+'.txt')
@@ -418,16 +485,23 @@ max_L = 6e-2
 max_L = 6e-1
 iqn_sr1, iqn_sr1_ts = iqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=300)
 
-max_L = 6e-2
 max_L = 5e-1
 max_M = 1e-8
 sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=300)
 
+
+max_L = 3e-1
+max_M = 1e-8
+tau = 20
+sliqn_srk, sliqn_srk_ts = sliqn_srk_sol(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=300)
+
 fig, ax = plt.subplots(1, 1, figsize=(5, 4))
-plt.plot(iqn[:10], '-', label='iqn', linewidth=2)
-plt.plot(sliqn[:10], '-.', label='sliqn', linewidth=2)
-plt.plot(iqn_sr1[:10], '--', label='iqn_sr1', linewidth=2)
-plt.plot(sliqn_sr1[:10], ':', label='sliqn_sr1', linewidth=2)
+plt.plot(iqn[:100], '-', label='iqn', linewidth=2)
+plt.plot(sliqn[:100], '-.', label='sliqn', linewidth=2)
+plt.plot(iqn_sr1[:100], '--', label='iqn_sr1', linewidth=2)
+plt.plot(sliqn_sr1[:100], ':', label='sliqn_sr1', linewidth=2)
+plt.plot(sliqn_srk[:100], '-', label='sliqn_sr1', linewidth=2)
+
 ax.grid()
 ax.legend()
 ax.set_yscale('log')  
@@ -437,21 +511,4 @@ ax.set_xlabel('Epochs, $n=500, \kappa=%d$'%(oracles[0].kappa))
 ax.set_title('General Function Minimization')
 plt.tight_layout()
 plt_name = "sliqn_"+ dataset + ".pdf"
-plt.savefig(plt_name, format='pdf', bbox_inches='tight', dpi=300)
-
-
-fig, ax = plt.subplots(1, 1, figsize=(5, 4))
-plt.plot(iqn_ts[:10], iqn[:10], '-', label='iqn', linewidth=2)
-plt.plot(sliqn_ts[:10], sliqn[:10], '-.', label='sliqn', linewidth=2)
-plt.plot(iqn_sr1_ts[:10], iqn_sr1[:10], '--', label='iqn_sr1', linewidth=2)
-plt.plot(sliqn_sr1_ts[:10], sliqn_sr1[:10], ':', label='sliqn_sr1', linewidth=2)
-ax.grid()
-ax.legend()
-ax.set_yscale('log')  
-# plt.xscale('log')  
-ax.set_ylabel('$\lambda_f(x_k)$')
-ax.set_xlabel('Seconds, $n=500, \kappa=%d$'%(oracles[0].kappa))
-ax.set_title('General Function Minimization')
-plt.tight_layout()
-plt_name = "sliqn_"+ dataset + "_time.pdf"
 plt.savefig(plt_name, format='pdf', bbox_inches='tight', dpi=300)
