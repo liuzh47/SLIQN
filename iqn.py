@@ -352,7 +352,8 @@ def sliqn_sr1_sol(oracles, max_L, max_M,
             Hessian_diff = stoc_Hessian - base_Hessian
             stoc_Hessian_2 = stoc_Hessian - Hessian_diff @ gv @ gv.T @ Hessian_diff / (gv.T @ Hessian_diff @ gv + 1e-30)
             
-            invG = invG + invG @ Hessian_diff @ gv @ gv.T @ Hessian_diff @ invG / (N * gv.T @ Hessian_diff @ gv - gv.T @ Hessian_diff @ invG @ Hessian_diff @ gv + 1e-30)
+            v = invG @ oracles[i].hes_vec(w, gv)
+            invG = invG + (gv - v) @ (gv - v).T / (N * gv.T @ Hessian_diff @ gv - gv.T @ Hessian_diff @ (gv - v) + 1e-30)
             invG = invG + invG @ vec_diff @ vec_diff.T @ invG / (N * vec_diff.T @ s - vec_diff.T @ invG @ vec_diff + 1e-30)
             B = B + (stoc_Hessian_2 - Gs[i]) / N
             u = u + (stoc_Hessian_2 @ w - Gs[i] @ ws[i]) / N
@@ -410,10 +411,10 @@ def sliqn_srk_sol(oracles, max_L, max_M, tau,
             GU = stoc_Hessian @ U
             AU = oracles[i].hesU(w, U)
             DU = GU - AU
-            stoc_Hessian_2 = stoc_Hessian - DU @ np.linalg.inv(U.T @ DU + 1e-20*np.eye(tau)) @ DU.T
+            stoc_Hessian_2 = stoc_Hessian - DU @ np.linalg.inv(U.T @ DU + 1e-30*np.eye(tau)) @ DU.T
             V = invG @ AU
             Delta = U - V
-            invG = invG + Delta @ ((np.linalg.inv(N * U.T @ DU - DU.T@(Delta)+1e-20*np.eye(tau)))@Delta.T )
+            invG = invG + Delta @ ((np.linalg.inv(N * U.T @ DU - DU.T@(Delta)+1e-30*np.eye(tau)))@Delta.T )
             invG = invG + invG @ vec_diff @ vec_diff.T @ invG / (N * vec_diff.T @ s - vec_diff.T @ invG @ vec_diff + 1e-30)
             B = B + (stoc_Hessian_2 - Gs[i]) / N
             u = u + (stoc_Hessian_2 @ w - Gs[i] @ ws[i]) / N
