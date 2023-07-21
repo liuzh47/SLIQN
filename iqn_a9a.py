@@ -489,13 +489,13 @@ def prepare_dataset(dataset):
 dataset = 'a9a' ## 'w8a', 'a6a', 'a9a', 'mushrooms', 'ijcnn1'
 X, Y = prepare_dataset(dataset)
 reg = 0.01
-reg = 1e-1
+reg = 3e-2
 oracle = Logistic(X, Y, reg)
 print(X.shape, Y.shape)
 
 
 # In[11]:
-batch_size = 10000
+batch_size = 5000
 num_of_batches = int(X.shape[0] / batch_size)
 data_size = batch_size * num_of_batches
 X = X[:data_size, :]
@@ -527,8 +527,8 @@ init_w = warmup_w
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=10)
 
 max_L = 1e2
-max_M = 1e-2
-grsr1, grsr1_ts = grsr1_sol(oracles, init_w, max_L, max_M, epochs=200)
+max_M = 3e-2
+#grsr1, grsr1_ts = grsr1_sol(oracles, init_w, max_L, max_M, epochs=200)
 
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=300)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
@@ -555,7 +555,7 @@ plt.plot(sliqn[:200], '-.', label='sliqn', linewidth=2)
 plt.plot(iqn_sr1[:200], '--', label='iqn_sr1', linewidth=2)
 plt.plot(sliqn_sr1[:200], ':', label='sliqn_sr1', linewidth=2)
 plt.plot(sliqn_srk[:200], '-', label='sliqn_srk', linewidth=2)
-plt.plot(grsr1[:200], "-.", label="grsr1", linewidth=2)
+#plt.plot(grsr1[:200], "-.", label="grsr1", linewidth=2)
 
 ax.grid()
 ax.legend()
@@ -563,7 +563,7 @@ ax.set_yscale('log')
 # plt.xscale('log') 
 plt.ylim(top=1e4) 
 ax.set_ylabel('$\lambda_f(x_k)$')
-ax.set_xlabel('Epochs, $n=500, \kappa=%d$'%(oracles[0].kappa))
+ax.set_xlabel('Epochs, $\kappa=%d$'%(oracles[0].kappa))
 ax.set_title('General Function Minimization')
 plt.tight_layout()
 plt_name = "sliqn_"+ dataset + ".pdf"
