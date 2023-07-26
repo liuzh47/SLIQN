@@ -224,6 +224,7 @@ def sliqn_sol(oracles, max_L, max_M,
     for epo in range(epochs):
         gamma_k = max_M * np.sqrt(max_L) * np.linalg.norm(init_w - w_opt) * (1 - 1 /(d * kappa))** epo
         invG = invG / (1 + gamma_k)**2
+        u = (1 + gamma_k)**2 * u
         for i in range(N):
             #w = np.linalg.pinv(B) @ (u - g)
             w = invG @ (u - g)
@@ -248,8 +249,8 @@ def sliqn_sol(oracles, max_L, max_M,
             invG = invG + invG @ (stoc_Hessian @ gv) @ (gv.T @ stoc_Hessian) @ invG / (N * gv.T @ stoc_Hessian @ gv - gv.T @ stoc_Hessian @ invG @ stoc_Hessian @ gv)
             invG = invG - invG @ scale_yy @ scale_yy.T @ invG / (N * scale_yy.T @ s + scale_yy.T @ invG @ scale_yy)
             invG = invG + invG @ (scale_Hessian @ s)@(s.T @ scale_Hessian) @ invG / (N * s.T @ Gs[i] @ s - s.T @ scale_Hessian @ invG @ scale_Hessian @ s)
-            B = B + (stoc_Hessian_2 - Gs[i]) / N
-            u = u + (stoc_Hessian_2 @ w - Gs[i] @ ws[i]) / N
+            B = B + (stoc_Hessian_2 - scale_Hessian) / N
+            u = u + (stoc_Hessian_2 @ w - scale_Hessian @ ws[i]) / N
             g = g + yy / N
             
             Gs[i] = np.copy(stoc_Hessian_2)
@@ -333,6 +334,7 @@ def sliqn_sr1_sol(oracles, max_L, max_M,
     for epo in range(epochs):
         gamma_k = max_M * np.sqrt(max_L) * np.linalg.norm(init_w - w_opt) * (1 - 1 /d)** epo
         invG = invG / (1 + gamma_k)**2
+        u = (1 + gamma_k)**2 * u
         for i in range(N):
             w = invG @ (u - g)
             cur_grad = oracles[i].grad(w)
@@ -356,8 +358,8 @@ def sliqn_sr1_sol(oracles, max_L, max_M,
             v = invG @ oracles[i].hes_vec(w, gv)
             invG = invG + invG@ Hessian_diff @ gv @ gv.T @ Hessian_diff @ invG / (N * gv.T @ Hessian_diff @ gv - gv.T @ Hessian_diff @ invG @ Hessian_diff @ gv + 1e-30)
             #invG = invG + invG @ vec_diff @ vec_diff.T @ invG / (N * vec_diff.T @ s - vec_diff.T @ invG @ vec_diff + 1e-30)
-            B = B + (stoc_Hessian_2 - Gs[i]) / N
-            u = u + (stoc_Hessian_2 @ w - Gs[i] @ ws[i]) / N
+            B = B + (stoc_Hessian_2 - scale_Hessian) / N
+            u = u + (stoc_Hessian_2 @ w - scale_Hessian @ ws[i]) / N
             g = g + yy / N
                         
             Gs[i] = np.copy(stoc_Hessian_2)
@@ -395,6 +397,7 @@ def sliqn_srk_sol(oracles, max_L, max_M, tau,
     for epo in range(epochs):
         gamma_k = max_M * np.sqrt(max_L) * np.linalg.norm(init_w - w_opt) * (1 - tau /d)** epo
         invG = invG / (1 + gamma_k)**2
+        u = (1 + gamma_k)**2 * u
         for i in range(N):
             w = invG @ (u - g)
             cur_grad = oracles[i].grad(w)
@@ -418,8 +421,8 @@ def sliqn_srk_sol(oracles, max_L, max_M, tau,
             Delta = U - V
             invG = invG + invG @ DU @ ((np.linalg.inv(N * U.T @ DU - DU.T@invG @ DU +1e-30*np.eye(tau)))@DU.T @ invG )
             #invG = invG + invG @ vec_diff @ vec_diff.T @ invG / (N * vec_diff.T @ s - vec_diff.T @ invG @ vec_diff + 1e-30)
-            B = B + (stoc_Hessian_2 - Gs[i]) / N
-            u = u + (stoc_Hessian_2 @ w - Gs[i] @ ws[i]) / N
+            B = B + (stoc_Hessian_2 - scale_Hessian) / N
+            u = u + (stoc_Hessian_2 @ w - scale_Hessian @ ws[i]) / N
             g = g + yy / N
                         
             Gs[i] = np.copy(stoc_Hessian_2)
@@ -486,10 +489,10 @@ def prepare_dataset(dataset):
     if np.min(Y) != -1:
         Y = 2 * Y - 1
     return X, Y
-dataset = 'w8a' ## 'w8a', 'a6a', 'a9a', 'mushrooms', 'ijcnn1', 'phishing', 'splice_scale', 'cod-rna', 'madelon', 'svmguide3'
+dataset = 'w8a' ## 'w8a', 'a6a', 'a9a', 'mushrooms', 'ijcnn1', 'phishing', 'splice_scale', 'svmguide3', 'german.numer_scale', 'covtype'
 X, Y = prepare_dataset(dataset)
 reg = 0.01
-reg = 3e-2
+reg = 3e-4
 oracle = Logistic(X, Y, reg)
 print(X.shape, Y.shape)
 
@@ -532,36 +535,37 @@ max_M = 3e-2
 
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=400)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
-max_L = 0.1
+max_L = 1
 max_M = 1e-8
 sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=400)
 max_L = 6e-2
 max_L = 6e-1
 iqn_sr1, iqn_sr1_ts = iqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=400)
 
-max_L = 1e+2
-max_M = 1e-8
+max_L = 1e+1
+max_M = 1e-4
 sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=400)
 
 
-max_L = 1e+2
-max_M = 1e-8
+max_L = 1e+1
+max_M = 1e-4
 tau = 10
+tau = 2
 sliqn_srk, sliqn_srk_ts = sliqn_srk_sol(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=400)
 
 fig, ax = plt.subplots(1, 1, figsize=(5, 4))
 plt.plot(iqn[:400], '-', label='iqn', linewidth=2)
 plt.plot(sliqn[:400], '-.', label='sliqn', linewidth=2)
-plt.plot(iqn_sr1[:400], '--', label='iqn_sr1', linewidth=2)
+#plt.plot(iqn_sr1[:400], '--', label='iqn_sr1', linewidth=2)
 plt.plot(sliqn_sr1[:400], ':', label='sliqn_sr1', linewidth=2)
-plt.plot(sliqn_srk[:400], '-', label='sliqn_srk', linewidth=2)
+plt.plot(sliqn_srk[:400], '--', label='sliqn_srk', linewidth=2)
 #plt.plot(grsr1[:200], "-.", label="grsr1", linewidth=2)
 
 ax.grid()
 ax.legend()
 ax.set_yscale('log')  
 # plt.xscale('log') 
-plt.ylim(top=1e4) 
+plt.ylim(top=1e2) 
 ax.set_ylabel('$\lambda_f(x_k)$')
 ax.set_xlabel('Epochs, $\kappa=%d$'%(oracles[0].kappa))
 ax.set_title('General Function Minimization')
