@@ -54,7 +54,7 @@ class Quadratic:
         self.L = np.max(self.diag_elems)
         self.μ = np.min(self.diag_elems)
         self.kappa = self.L / self.μ
-        print("Logistic regression oracle created")
+        print("Quadratic oracle created")
         print("\td = %d, L = %.2f; μ = %.2f;"%(self.d, self.L, self.μ))
         print("\tκ = {}".format(self.kappa))
 
@@ -142,7 +142,8 @@ def iqn_sol(oracles, max_L,
         ws.append(np.copy(init_w))
         grads.append(oracles[i].grad(init_w))
         g = g + grads[-1]        
-    res = [np.linalg.norm(ws[-1] - w_opt)]
+    res = [1]
+    init_norm = np.linalg.norm(init_w - w_opt)
     w = np.copy(init_w)
     B = np.copy(Gs[0])
     u = Gs[0] @ ws[0]
@@ -169,7 +170,7 @@ def iqn_sol(oracles, max_L,
             grads[i] = np.copy(cur_grad)
             ws[i] = np.copy(w)
             
-        res.append(np.linalg.norm(ws[-1] - w_opt))
+        res.append(np.linalg.norm(ws[-1] - w_opt) / init_norm)
         ts.append(time.time() - init_time)
         
     return res, ts
@@ -242,7 +243,8 @@ def sliqn_sol(oracles, max_L, max_M,
         ws.append(np.copy(init_w))
         grads.append(oracles[i].grad(init_w))
         g = g + grads[-1]        
-    res = [np.linalg.norm(ws[-1] - w_opt)]
+    res = [1]
+    init_norm = np.linalg.norm(init_w - w_opt)
     w = np.copy(init_w)
     B = np.copy(Gs[0])
     u = Gs[0] @ ws[0]
@@ -285,7 +287,7 @@ def sliqn_sol(oracles, max_L, max_M,
             grads[i] = np.copy(cur_grad)
             ws[i] = np.copy(w)
             
-        res.append(np.linalg.norm(ws[-1] - w_opt))
+        res.append(np.linalg.norm(ws[-1] - w_opt) / init_norm)
         ts.append(time.time() - init_time)
         
     return res, ts
@@ -353,7 +355,8 @@ def sliqn_sr1_sol(oracles, max_L, max_M,
         ws.append(np.copy(init_w))
         grads.append(oracles[i].grad(init_w))
         g = g + grads[-1]        
-    res = [np.linalg.norm(ws[-1] - w_opt)]
+    res = [1]
+    init_norm = np.linalg.norm(init_w - w_opt)
     w = np.copy(init_w)
     B = np.copy(Gs[0])
     u = Gs[0] @ ws[0]
@@ -395,7 +398,7 @@ def sliqn_sr1_sol(oracles, max_L, max_M,
             grads[i] = np.copy(cur_grad)
             ws[i] = np.copy(w)
             
-        res.append(np.linalg.norm(ws[-1] - w_opt))
+        res.append(np.linalg.norm(ws[-1] - w_opt) / init_norm)
         ts.append(time.time() - init_time)
         
     return res, ts
@@ -416,7 +419,8 @@ def sliqn_srk_sol(oracles, max_L, max_M, tau,
         ws.append(np.copy(init_w))
         grads.append(oracles[i].grad(init_w))
         g = g + grads[-1]        
-    res = [np.linalg.norm(ws[-1] - w_opt)]
+    res = [1]
+    init_norm = np.linalg.norm(init_w - w_opt)
     w = np.copy(init_w)
     B = np.copy(Gs[0])
     u = Gs[0] @ ws[0]
@@ -458,7 +462,7 @@ def sliqn_srk_sol(oracles, max_L, max_M, tau,
             grads[i] = np.copy(cur_grad)
             ws[i] = np.copy(w)
             
-        res.append(np.linalg.norm(ws[-1] - w_opt))
+        res.append(np.linalg.norm(ws[-1] - w_opt) / init_norm)
         ts.append(time.time() - init_time)
         
     return res, ts
@@ -558,28 +562,29 @@ max_M = 0
 sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=400)
 
 
-max_L = 2e5
+max_L = 4e5
 max_M = 0
 tau = 5
 #tau = 2
 sliqn_srk, sliqn_srk_ts = sliqn_srk_sol(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=400)
 
 fig, ax = plt.subplots(1, 1, figsize=(5, 4))
-plt.plot(iqn[:400], '-', label='iqn', linewidth=2)
-plt.plot(sliqn[:400], '-.', label='sliqn', linewidth=2)
+plt.plot(iqn[:150], '-', label='iqn', linewidth=2)
+plt.plot(sliqn[:150], '-.', label='sliqn', linewidth=2)
 #plt.plot(iqn_sr1[:400], '--', label='iqn_sr1', linewidth=2)
-plt.plot(sliqn_sr1[:400], ':', label='sliqn_sr1', linewidth=2)
-plt.plot(sliqn_srk[:400], '--', label='sliqn_srk', linewidth=2)
+plt.plot(sliqn_sr1[:150], ':', label='sliqn_sr1', linewidth=2)
+plt.plot(sliqn_srk[:150], '--', label='sliqn_srk', linewidth=2)
 #plt.plot(grsr1[:200], "-.", label="grsr1", linewidth=2)
 
 ax.grid()
 ax.legend()
 ax.set_yscale('log')  
 # plt.xscale('log') 
-plt.ylim(top=1e2) 
-ax.set_ylabel('$\lambda_f(x_k)$')
-ax.set_xlabel('Epochs, $\kappa=%d$'%(oracles[0].kappa))
-ax.set_title('General Function Minimization')
+# plt.ylim(top=1e2) 
+kappa_avg = np.max(A_avg) / np.min(np.diag(A_avg))
+ax.set_ylabel('Normalized Error')
+ax.set_xlabel('No of effective passes, $\kappa=%d$'%(kappa_avg))
+ax.set_title('Quadratic Function Minimization')
 plt.tight_layout()
 plt_name = "sliqn_quadratic.pdf"
 plt.savefig(plt_name, format='pdf', bbox_inches='tight', dpi=300)
