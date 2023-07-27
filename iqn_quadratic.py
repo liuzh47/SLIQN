@@ -50,8 +50,8 @@ class Quadratic:
         self.invA = np.linalg.inv(self.A)
         self.diag_elems = np.diag(self.A)
         self.b = np.random.randn(d, 1)
-        self.L = np.linalg.norm(self.A)
-        self.μ = mu
+        eigens = np.linalg.eigh(self.A)[0]
+        self.L, self.μ = eigens[-1], eigens[0]
         self.kappa = self.L / self.μ
         print("Logistic regression oracle created")
         print("\td = %d, L = %.2f; μ = %.2f;"%(self.d, self.L, self.μ))
@@ -99,6 +99,32 @@ def newton_sol(w, epoch):
         print(res[-1], oracle.f(w))
         warmup_ws.append(w)
     return res, w, warmup_ws[0]
+    
+def BFGS_sol(oracle, L, init_x, epochs=2000):
+    d = oracle.d
+    G = np.eye(d) * L
+    sqr_invG = np.linalg.cholesky(np.linalg.pinv(G)).T
+    x = init_x
+    gx = oracle.grad(x)
+    grbfgsv1 = [np.sqrt(gx.T @ oracle.invA @ gx)[0, 0]]
+    for i in range(epochs):
+        x = x - sqr_invG.T @ sqr_invG @ gx
+    
+        ind = np.argmax(np.diag(G) / oracle.hes_diag(x))
+        u = np.zeros([d, 1])
+        u[ind] = 1 
+    
+        Au = oracle.hesU(x, u)
+        Gu = G @ u
+        G = G - (Gu @ Gu.T) / (u.T @ Gu) + (Au @ Au.T) / (u.T @ Au) 
+
+        v = u / np.sqrt(u.T @ Au)
+        _, tmp_r = scipy.linalg.qr_update(np.eye(d), sqr_invG, -sqr_invG @ (oracle.hesU(x, v)), v)
+        _, sqr_invG = scipy.linalg.qr_insert(np.eye(d), tmp_r, v.T, 0)
+        sqr_invG = sqr_invG[:-1, :]
+        gx = oracle.grad(x)
+        grbfgsv1.append(np.sqrt(gx.T @ oracle.invA @ gx)[0, 0])
+    return grbfgsv1
 
 def iqn_sol(oracles, max_L, 
             w_opt, init_w, epochs=200):
@@ -515,27 +541,30 @@ max_M = 0.03
 #init_w = ws[250]
 init_w = w
 
+bfgs = BFGS_sol(oracles[0], oracles[0].L, init_w, epochs=200)
+grsr1 = grsr1_sol(oracles, init_w, oracles[0].L, 0, 500, corr=False)
+
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=10)
 
-max_L = 1e2
+max_L = oracles[0].L
 max_M = 3e-2
 #grsr1, grsr1_ts = grsr1_sol(oracles, init_w, max_L, max_M, epochs=200)
 
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=400)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
-max_L = 1
+max_L = oracles[0].L
 max_M = 0
 sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=400)
 
-max_L = 1e+1
+max_L = oracles[0].L
 max_M = 0
 sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=400)
 
 
-max_L = 1e+1
+max_L = oracles[0].L
 max_M = 0
 tau = 10
-tau = 2
+tau = 3
 sliqn_srk, sliqn_srk_ts = sliqn_srk_sol(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=400)
 
 fig, ax = plt.subplots(1, 1, figsize=(5, 4))
