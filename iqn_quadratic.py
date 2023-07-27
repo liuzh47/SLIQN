@@ -444,10 +444,10 @@ def sliqn_srk_sol(oracles, max_L, max_M, tau,
             GU = stoc_Hessian @ U
             AU = oracles[i].hesU(w, U)
             DU = GU - AU
-            stoc_Hessian_2 = stoc_Hessian - DU @ np.linalg.inv(U.T @ DU + 1e-30*np.eye(tau)) @ DU.T
+            stoc_Hessian_2 = stoc_Hessian - DU @ np.linalg.pinv(U.T @ DU + 1e-30*np.eye(tau)) @ DU.T
             V = invG @ AU
             Delta = U - V
-            invG = invG + invG @ DU @ ((np.linalg.inv(N * U.T @ DU - DU.T@invG @ DU +1e-30*np.eye(tau)))@DU.T @ invG )
+            invG = invG + invG @ DU @ ((np.linalg.pinv(N * U.T @ DU - DU.T@invG @ DU +1e-30*np.eye(tau)))@DU.T @ invG )
             #invG = invG + invG @ vec_diff @ vec_diff.T @ invG / (N * vec_diff.T @ s - vec_diff.T @ invG @ vec_diff + 1e-30)
             B = B + (stoc_Hessian_2 - scale_Hessian) / N
             u = u + (stoc_Hessian_2 @ w - scale_Hessian @ ws[i]) / N
@@ -511,9 +511,9 @@ def grsr1_sol(oracles, w, L, M, epochs, corr=True):
 
 
 # In[11]:
-num_of_instances = 1
+num_of_instances = 3
 d = 100
-kappa = 2000
+kappa = 1e7
 
 w = np.random.randn(d, 1) / 10
 
@@ -534,7 +534,7 @@ print(len(oracles))
 
 res, ws = grad_sol(w, 1000, 1e-3, A_avg, b_avg)
 
-max_L = 0.1
+max_L = 2e4
 max_M = 0.03
 
 #init_w = np.random.randn(d, 1) / 10
@@ -546,25 +546,22 @@ grsr1 = grsr1_sol(oracles, init_w, oracles[0].L, 0, 500, corr=False)
 
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=10)
 
-max_L = oracles[0].L
-max_M = 3e-2
-#grsr1, grsr1_ts = grsr1_sol(oracles, init_w, max_L, max_M, epochs=200)
 
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=400)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
-max_L = oracles[0].L
+max_L = 2e4
 max_M = 0
 sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=400)
 
-max_L = oracles[0].L
+max_L = 5e4
 max_M = 0
 sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=400)
 
 
-max_L = oracles[0].L
+max_L = 5e4
 max_M = 0
-tau = 10
-tau = 3
+tau = 5
+#tau = 2
 sliqn_srk, sliqn_srk_ts = sliqn_srk_sol(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=400)
 
 fig, ax = plt.subplots(1, 1, figsize=(5, 4))
