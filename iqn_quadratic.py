@@ -41,17 +41,17 @@ plt.rcParams['lines.linewidth'] = 2
 
 ## Loistic Regression.
 class Quadratic:
-    def __init__(self, d, xi):
+    def __init__(self, d, kappa):
         self.d = d
-        self.xi = xi
-        t1 = np.random.uniform(1, 10**(xi/2), int(d/2))
-        t2 = np.random.uniform(10**(-xi/2), 1, int(d/2))
-        self.diag_elems = np.concatenate((t1, t2))
-        self.A = np.diag(self.diag_elems)
-        self.invA = np.diag(1 / self.diag_elems)
-        self.b = np.random.uniform(0, 1000, d)
-        self.L = np.max(self.diag_elems)
-        self.μ = np.min(self.diag_elems)
+        A = np.random.randn(d-1, d) * 10
+        self.A = A.T @ A
+        mu = np.linalg.eigh(self.A)[0][-1] / (kappa-0.99)
+        self.A += np.eye(d) * mu
+        self.invA = np.linalg.inv(self.A)
+        self.diag_elems = np.diag(self.A)
+        self.b = np.random.randn(d, 1)
+        self.L = np.linalg.norm(self.A)
+        self.μ = mu
         self.kappa = self.L / self.μ
         print("Logistic regression oracle created")
         print("\td = %d, L = %.2f; μ = %.2f;"%(self.d, self.L, self.μ))
@@ -485,9 +485,9 @@ def grsr1_sol(oracles, w, L, M, epochs, corr=True):
 
 
 # In[11]:
-num_of_instances = 10
-d = 50
-xi = 2
+num_of_instances = 1
+d = 100
+kappa = 2000
 
 w = np.random.randn(d, 1) / 10
 
@@ -496,24 +496,24 @@ A_avg = 0
 b_avg = 0
 
 for i in range(num_of_instances):
-    oracles.append(Quadratic(d, xi))
+    oracles.append(Quadratic(d, kappa))
     A_avg += oracles[-1].A
     b_avg += oracles[-1].b
 
 A_avg /= num_of_instances
 b_avg /= num_of_instances
-b_avg = np.expand_dims(b_avg, axis=1)
 w_opt = -np.linalg.pinv(A_avg) @ b_avg
 
 print(len(oracles))
 
-res, ws = grad_sol(w, 1000, 1e-1, A_avg, b_avg)
+res, ws = grad_sol(w, 1000, 1e-3, A_avg, b_avg)
 
 max_L = 0.1
 max_M = 0.03
 
 #init_w = np.random.randn(d, 1) / 10
-init_w = ws[300]
+#init_w = ws[250]
+init_w = w
 
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=10)
 
@@ -524,16 +524,16 @@ max_M = 3e-2
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=400)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 max_L = 1
-max_M = 1e-8
+max_M = 0
 sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=400)
 
 max_L = 1e+1
-max_M = 1e-4
+max_M = 0
 sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=400)
 
 
 max_L = 1e+1
-max_M = 1e-4
+max_M = 0
 tau = 10
 tau = 2
 sliqn_srk, sliqn_srk_ts = sliqn_srk_sol(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=400)
