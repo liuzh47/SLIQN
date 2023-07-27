@@ -41,17 +41,18 @@ plt.rcParams['lines.linewidth'] = 2
 
 ## Loistic Regression.
 class Quadratic:
-    def __init__(self, d, kappa):
+    def __init__(self, d, xi):
         self.d = d
-        A = np.random.randn(d-1, d) * 10
-        self.A = A.T @ A
-        mu = np.linalg.eigh(self.A)[0][-1] / (kappa-0.99)
-        self.A += np.eye(d) * mu
-        self.invA = np.linalg.inv(self.A)
-        self.diag_elems = np.diag(self.A)
-        self.b = np.random.randn(d, 1)
-        eigens = np.linalg.eigh(self.A)[0]
-        self.L, self.μ = eigens[-1], eigens[0]
+        self.xi = xi
+        t1 = np.random.uniform(1, 10**(xi/2), int(d/2))
+        t2 = np.random.uniform(10**(-xi/2), 1, int(d/2))
+        self.diag_elems = np.concatenate((t1, t2))
+        self.A = np.diag(self.diag_elems)
+        self.invA = np.diag(1 / self.diag_elems)
+        self.b = np.random.uniform(0, 1000, d)
+        self.b = np.expand_dims(self.b, axis=1)
+        self.L = np.max(self.diag_elems)
+        self.μ = np.min(self.diag_elems)
         self.kappa = self.L / self.μ
         print("Logistic regression oracle created")
         print("\td = %d, L = %.2f; μ = %.2f;"%(self.d, self.L, self.μ))
@@ -87,7 +88,7 @@ def grad_sol(w, epoch, lr, A, b):
         ws.append(w)
     return res, ws
 
-def newton_sol(w, epoch):
+def newton_sol(oracle, w, epoch):
     warmup_ws = []
     gw = oracle.grad(w)
     res = [np.linalg.norm(gw)]
@@ -96,9 +97,8 @@ def newton_sol(w, epoch):
         gw = oracle.grad(w)
 #         res.append(np.sqrt(gw.T @ np.linalg.pinv(oracle.hes(w)) @ gw)[0, 0])   
         res.append(np.linalg.norm(gw))  
-        print(res[-1], oracle.f(w))
         warmup_ws.append(w)
-    return res, w, warmup_ws[0]
+    return res, w, warmup_ws[1]
     
 def BFGS_sol(oracle, L, init_x, epochs=2000):
     d = oracle.d
@@ -511,9 +511,9 @@ def grsr1_sol(oracles, w, L, M, epochs, corr=True):
 
 
 # In[11]:
-num_of_instances = 3
+num_of_instances = 10
 d = 100
-kappa = 1e7
+xi = 8
 
 w = np.random.randn(d, 1) / 10
 
@@ -522,7 +522,7 @@ A_avg = 0
 b_avg = 0
 
 for i in range(num_of_instances):
-    oracles.append(Quadratic(d, kappa))
+    oracles.append(Quadratic(d, xi))
     A_avg += oracles[-1].A
     b_avg += oracles[-1].b
 
@@ -532,33 +532,32 @@ w_opt = -np.linalg.pinv(A_avg) @ b_avg
 
 print(len(oracles))
 
-res, ws = grad_sol(w, 1000, 1e-3, A_avg, b_avg)
+res, ws = grad_sol(w, 200000, 1e-4, A_avg, b_avg)
 
-max_L = 2e4
+newton, _, warmup_w = newton_sol(oracles[0], w, 40)
+
+max_L = 2e3
 max_M = 0.03
 
 #init_w = np.random.randn(d, 1) / 10
 #init_w = ws[250]
-init_w = w
-
-bfgs = BFGS_sol(oracles[0], oracles[0].L, init_w, epochs=200)
-grsr1 = grsr1_sol(oracles, init_w, oracles[0].L, 0, 500, corr=False)
+init_w = ws[-1]
 
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=10)
 
 
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=400)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
-max_L = 2e4
+max_L = 2e3
 max_M = 0
 sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=400)
 
-max_L = 5e4
+max_L = 5e3
 max_M = 0
 sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=400)
 
 
-max_L = 5e4
+max_L = 5e3
 max_M = 0
 tau = 5
 #tau = 2
