@@ -82,6 +82,7 @@ def grad_sol(w, epoch, lr, A, b):
     res = []
     ws = []
     for i in range(epoch):
+        lr = 1 / (i + 500000)
         cur_grad = A @ w + b
         w = w - lr * cur_grad
         res.append(np.linalg.norm(cur_grad))
@@ -513,7 +514,7 @@ def grsr1_sol(oracles, w, L, M, epochs, corr=True):
 # In[11]:
 num_of_instances = 10
 d = 100
-xi = 8
+xi = 12
 
 w = np.random.randn(d, 1) / 10
 
@@ -532,7 +533,7 @@ w_opt = -np.linalg.pinv(A_avg) @ b_avg
 
 print(len(oracles))
 
-res, ws = grad_sol(w, 200000, 1e-4, A_avg, b_avg)
+res, ws = grad_sol(w, 100000, 1e-6, A_avg, b_avg)
 
 newton, _, warmup_w = newton_sol(oracles[0], w, 40)
 
@@ -541,7 +542,7 @@ max_M = 0.03
 
 #init_w = np.random.randn(d, 1) / 10
 #init_w = ws[250]
-init_w = ws[-1]
+init_w = w_opt + np.random.randn(d, 1) / 10
 
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=10)
 
@@ -552,12 +553,12 @@ max_L = 2e3
 max_M = 0
 sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=400)
 
-max_L = 5e3
+max_L = 2e5
 max_M = 0
 sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=400)
 
 
-max_L = 5e3
+max_L = 2e5
 max_M = 0
 tau = 5
 #tau = 2
