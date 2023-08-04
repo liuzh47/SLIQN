@@ -14,6 +14,7 @@ import scipy.sparse as sparse
 from scipy.sparse import csr_matrix, linalg
 import time
 import heapq
+import pickle
 
 import matplotlib
 matplotlib.use("agg")
@@ -545,7 +546,7 @@ Ls = [o.L for o in oracles]
 Ms = [o.M for o in oracles]
 
 
-max_L = 1e1
+max_L = 3e0
 max_M = 0.03
 
 #init_w = np.random.randn(d, 1) / 10
@@ -556,27 +557,37 @@ iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=10)
 
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=500)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
-max_L = 1e1 #1e2
+max_L = 3e0 #1e2
 max_M = 1e-16
 sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 
-max_L = 1e2
+max_L = 3e0
 max_M = 1e-4
 sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 
 
-max_L = 1e2
+max_L = 3e0
 max_M = 1e-4
 tau = 10
-tau = 2
+tau = 5
 sliqn_srk, sliqn_srk_ts = sliqn_srk_sol(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=500)
 
+res_list = []
+res_list.append(iqn)
+res_list.append(sliqn)
+res_list.append(sliqn_sr1)
+res_list.append(sliqn_srk)
+
+
+with open(dataset+".pkl", "wb") as f:
+    pickle.dump(res_list, f)
+
 fig, ax = plt.subplots(1, 1, figsize=(5, 4))
-plt.plot(iqn[:120], '-', label='IQN', linewidth=2)
-plt.plot(sliqn[:120], '-.', label='SLIQN', linewidth=2)
+plt.plot(iqn[:100], '-', label='IQN', linewidth=2)
+plt.plot(sliqn[:100], '-.', label='SLIQN', linewidth=2)
 #plt.plot(iqn_sr1[:500], '--', label='iqn_sr1', linewidth=2)
-plt.plot(sliqn_sr1[:120], ':', label='GLINS', linewidth=2)
-plt.plot(sliqn_srk[:120], '--', label='GLINS'+get_super('+'), linewidth=2)
+plt.plot(sliqn_sr1[:100], ':', label='LISR1', linewidth=2)
+plt.plot(sliqn_srk[:100], '--', label='LISR-k', linewidth=2)
 #plt.plot(grsr1[:200], "-.", label="grsr1", linewidth=2)
 
 ax.grid()
@@ -584,8 +595,9 @@ ax.legend()
 ax.set_yscale('log')  
 # plt.xscale('log') 
 #plt.ylim(bottom=1e-10)
+#plt.xlim(right=120)
 ax.set_ylabel('Normalized Error')
-ax.set_xlabel('No of effective passes, $\kappa=%.2e$'%(oracle.kappa))
+ax.set_xlabel('No of effective passes')
 ax.set_title('General Function Minimization')
 plt.tight_layout()
 plt_name = "sliqn_"+ dataset + ".pdf"
