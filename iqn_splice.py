@@ -14,6 +14,7 @@ import scipy.sparse as sparse
 from scipy.sparse import csr_matrix, linalg
 import time
 import heapq
+import pickle
 
 import matplotlib
 matplotlib.use("agg")
@@ -494,6 +495,14 @@ def grsr1_sol(oracles, w, L, M, epochs, corr=True):
             print(res[-1])
     print(res[-1])
     return res,time_t
+    
+# function to convert to superscript
+def get_super(x):
+	normal = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-=()"
+	super_s = "ᴬᴮᶜᴰᴱᶠᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾQᴿˢᵀᵁⱽᵂˣʸᶻᵃᵇᶜᵈᵉᶠᵍʰᶦʲᵏˡᵐⁿᵒᵖ۹ʳˢᵗᵘᵛʷˣʸᶻ⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾"
+	res = x.maketrans(''.join(normal), ''.join(super_s))
+	return x.translate(res)
+
 
 def prepare_dataset(dataset):
     X, Y = sklearn.datasets.load_svmlight_file('./data/libsvm/'+dataset+'.txt')
@@ -535,7 +544,9 @@ print(len(oracles))
 
 Ls = [o.L for o in oracles]
 Ms = [o.M for o in oracles]
-max_L = 1e2
+
+
+max_L = 1e1
 max_M = 0.03
 
 #init_w = np.random.randn(d, 1) / 10
@@ -543,56 +554,60 @@ init_w = warmup_w
 
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=10)
 
-max_L = 1e2
-max_M = 3e-2
-#grsr1, grsr1_ts = grsr1_sol(oracles, init_w, max_L, max_M, epochs=200)
 
-iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=1000)
+iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=500)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
-max_L = 1e2
+max_L = 1e1 #1e2
 max_M = 1e-16
-sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=400)
-max_L = 6e-2
-max_L = 6e-1
-#iqn_sr1, iqn_sr1_ts = iqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
+sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 
-max_L = 1e+2
+max_L = 1e1
 max_M = 1e-4
-sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=400)
+sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 
 
-max_L = 3e+2
+max_L = 1e2
 max_M = 1e-4
 tau = 10
-tau = 6
-sliqn_srk, sliqn_srk_ts = sliqn_srk_sol(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=400)
+tau = 5
+sliqn_srk, sliqn_srk_ts = sliqn_srk_sol(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=500)
+
+res_list = []
+res_list.append(iqn)
+res_list.append(sliqn)
+res_list.append(sliqn_sr1)
+res_list.append(sliqn_srk)
+
+
+with open(dataset+".pkl", "wb") as f:
+    pickle.dump(res_list, f)
 
 fig, ax = plt.subplots(1, 1, figsize=(5, 4))
-plt.plot(iqn[:120], '-', label='IQN', linewidth=2)
-plt.plot(sliqn[:120], '-.', label='SLIQN', linewidth=2)
+plt.plot(iqn[:150], '-', label='IQN', linewidth=2)
+plt.plot(sliqn[:150], '-.', label='SLIQN', linewidth=2)
 #plt.plot(iqn_sr1[:500], '--', label='iqn_sr1', linewidth=2)
-plt.plot(sliqn_sr1[:120], ':', label='GLINS', linewidth=2)
-plt.plot(sliqn_srk[:120], '--', label='GLINS+', linewidth=2)
+plt.plot(sliqn_sr1[:150], ':', label='GLINS', linewidth=2)
+plt.plot(sliqn_srk[:150], '--', label='GLINS'+get_super('+'), linewidth=2)
 #plt.plot(grsr1[:200], "-.", label="grsr1", linewidth=2)
 
 ax.grid()
 ax.legend()
 ax.set_yscale('log')  
 # plt.xscale('log') 
-#plt.ylim(top=5)
+#plt.ylim(bottom=1e-10)
 ax.set_ylabel('Normalized Error')
-ax.set_xlabel('No of effective passes, $\kappa=%d$'%(oracle.kappa))
+ax.set_xlabel('No of effective passes, $\kappa=%.2e$'%(oracle.kappa))
 ax.set_title('General Function Minimization')
 plt.tight_layout()
 plt_name = "sliqn_"+ dataset + ".pdf"
 plt.savefig(plt_name, format='pdf', bbox_inches='tight', dpi=300)
 
 fig, ax = plt.subplots(1, 1, figsize=(5, 4))
-plt.plot(iqn_ts[:1000], iqn[:1000], '-', label='IQN', linewidth=2)
-plt.plot(sliqn_ts[:400], sliqn[:400], '-.', label='SLIQN', linewidth=2)
+plt.plot(iqn_ts[:250], iqn[:250], '-', label='IQN', linewidth=2)
+plt.plot(sliqn_ts[:250], sliqn[:250], '-.', label='SLIQN', linewidth=2)
 #plt.plot(iqn_sr1[:400], '--', label='iqn_sr1', linewidth=2)
-plt.plot(sliqn_sr1_ts[:400], sliqn_sr1[:400], ':', label='GLINS', linewidth=2)
-plt.plot(sliqn_srk_ts[:400], sliqn_srk[:400], '--', label='GLINS+', linewidth=2)
+plt.plot(sliqn_sr1_ts[:250], sliqn_sr1[:250], ':', label='GLINS', linewidth=2)
+plt.plot(sliqn_srk_ts[:250], sliqn_srk[:250], '--', label='GLINS'+get_super('+'), linewidth=2)
 #plt.plot(grsr1[:200], "-.", label="grsr1", linewidth=2)
 
 ax.grid()
@@ -600,7 +615,7 @@ ax.legend()
 ax.set_yscale('log')  
 # plt.xscale('log') 
 #plt.ylim(bottom=1e-11, top=5)
-plt.xlim(left=-0.05, right=0.5)
+#plt.xlim(left=-0.05, right=6.5)
 ax.set_ylabel('Normalized Error')
 ax.set_xlabel('Seconds, $\kappa=%d$'%(oracle.kappa))
 ax.set_title('General Function Minimization')
