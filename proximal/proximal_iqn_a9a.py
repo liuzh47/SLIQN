@@ -104,13 +104,13 @@ def proximal_solver(w, B, g, gamma, L_1=3e3, tol=1e-3):
         w = w_1
     return w
 
-def newton_sol(w, epoch, gamma):
+def grad_sol(w, epoch, gamma, lr=1e-3):
     warmup_ws = []
     gw = oracle.grad(w)
     res = [np.linalg.norm(gw)]
     for i in range(epoch):
         w_0 = w
-        w = w - np.linalg.pinv(oracle.hes(w)) @ oracle.grad(w)
+        w = w - lr * oracle.grad(w)
         w = lasso_sol(w, gamma)
         gw = oracle.grad(w)
 #         res.append(np.sqrt(gw.T @ np.linalg.pinv(oracle.hes(w)) @ gw)[0, 0])   
@@ -588,8 +588,8 @@ oracle = Logistic(X, Y, reg)
 d = oracle.d
 G = np.eye(d) * oracle.L
 w = np.random.randn(d, 1) / 10
-t_gamma = 1e-30
-res, w_opt, warmup_w = newton_sol(w, 20, t_gamma)
+t_gamma = 1e-6
+res, w_opt, warmup_w = grad_sol(w, 500, t_gamma)
 #w_opt = lasso_sol(w_opt, t_gamma)
 
 oracles = []
