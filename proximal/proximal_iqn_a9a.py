@@ -86,23 +86,41 @@ class Logistic:
         return np.sum(self.X ** 2 * p * (1-p), axis=0) / self.N + self.μ * np.ones(self.d)
 
 
-# In[9]:
+def lasso_sol(w, gamma):
+    ans = np.sign(w) * np.maximum(np.abs(w) - gamma, 0)
+    return ans
 
-def newton_sol(w, epoch):
+def local_approx_sol(w, B, g, L_1=1):
+    grad = B @ w - g
+    ans = w - grad / L_1
+    return ans
+    
+def proximal_solver(w, B, g, gamma, L_1=3e3, tol=1e-3):
+    for i in range(100):
+        w_1 = local_approx_sol(w, B, g, L_1)
+        w_1 = lasso_sol(w_1, gamma)
+        if (L_1 * np.linalg.norm(w - w_1) <= tol):
+            break
+        w = w_1
+    return w
+
+def newton_sol(w, epoch, gamma):
     warmup_ws = []
     gw = oracle.grad(w)
     res = [np.linalg.norm(gw)]
     for i in range(epoch):
+        w_0 = w
         w = w - np.linalg.pinv(oracle.hes(w)) @ oracle.grad(w)
+        w = lasso_sol(w, gamma)
         gw = oracle.grad(w)
 #         res.append(np.sqrt(gw.T @ np.linalg.pinv(oracle.hes(w)) @ gw)[0, 0])   
-        res.append(np.linalg.norm(gw))  
+        res.append(np.linalg.norm(w - w_0))  
         print(res[-1], oracle.f(w))
         warmup_ws.append(w)
     return res, w, warmup_ws[0]
 
 def iqn_sol(oracles, max_L, 
-            w_opt, init_w, epochs=200):
+            w_opt, init_w, epochs=200, gamma=0.1):
     N = len(oracles)
     Gs = []
     ws = []
@@ -125,18 +143,19 @@ def iqn_sol(oracles, max_L,
     init_time = time.time()
     for _ in range(epochs):
         for i in range(N):
-            w = invG @ (u - g)
+            #w = invG @ (u - g) 
+            w = proximal_solver(w, B, u - g, gamma)
             cur_grad = oracles[i].grad(w)
             s = w - ws[i]
             yy = cur_grad - grads[i]
             
-            stoc_Hessian = Gs[i] + yy@(yy.T / (yy.T@s)) - \
-                           (Gs[i]@ s)@((s.T@Gs[i]) / (s.T @ Gs[i] @s))
+            stoc_Hessian = Gs[i] + yy@(yy.T / (yy.T@s + 1e-30)) - \
+                           (Gs[i]@ s)@((s.T@Gs[i]) / (s.T @ Gs[i] @s + 1e-30))
             B = B + (stoc_Hessian - Gs[i]) / N
             u = u + (stoc_Hessian @ w - Gs[i] @ ws[i]) / N
             g = g + yy / N
             
-            U = invG - (invG@ yy) @ ((yy.T@ invG) / (N * yy.T@s + yy.T@ invG @ yy))
+            U = invG - (invG@ yy) @ ((yy.T@ invG) / (N * yy.T@s + yy.T@ invG @ yy + 1e-30))
             invG = U + (U@(Gs[i]@s))@(((s.T@Gs[i])@U) / (N* s.T@Gs[i]@s - (s.T@Gs[i])@U@(Gs[i]@s)))
             
             Gs[i] = np.copy(stoc_Hessian)
@@ -150,7 +169,7 @@ def iqn_sol(oracles, max_L,
     
     
 def iqs_sol(oracles, max_L, max_M,
-            w_opt, init_w, corr=False, epochs=200):
+            w_opt, init_w, corr=False, epochs=200, gamma=0.1):
     N = len(oracles)
     Gs = []
     ws = []
@@ -170,7 +189,8 @@ def iqs_sol(oracles, max_L, max_M,
     g = g / N
     for _ in range(epochs):
         for i in range(N):
-            w = np.linalg.pinv(B) @ (u - g)
+            #w = np.linalg.pinv(B) @ (u - g)
+            w = proximal_solver(w, B, u - g, gamma)
             cur_grad = oracles[i].grad(w)
             s = w - ws[i]
             yy = cur_grad - grads[i]
@@ -201,7 +221,7 @@ def iqs_sol(oracles, max_L, max_M,
 # In[10]:
 
 def sliqn_sol(oracles, max_L, max_M,
-            w_opt, init_w, corr=False, epochs=200):
+            w_opt, init_w, corr=False, epochs=200, gamma=0.1):
     N = len(oracles)
     Gs = []
     ws = []
@@ -227,10 +247,11 @@ def sliqn_sol(oracles, max_L, max_M,
     for epo in range(epochs):
         gamma_k = max_M * np.sqrt(max_L) * np.linalg.norm(init_w - w_opt) * (1 - 1 /(d * kappa))** epo
         invG = invG / (1 + gamma_k)**2
+        B = B * (1 + gamma_k)**2
         u = (1 + gamma_k)**2 * u
         for i in range(N):
-            #w = np.linalg.pinv(B) @ (u - g)
-            w = invG @ (u - g)
+            #w = invG @ (u - g)
+            w = proximal_solver(w, B, u - g, gamma)
             cur_grad = oracles[i].grad(w)
             s = w - ws[i]
             yy = cur_grad - grads[i]
@@ -238,8 +259,8 @@ def sliqn_sol(oracles, max_L, max_M,
             scale_Hessian = (1 + gamma_k)**2 * Gs[i]
             scale_yy = (1 + gamma_k) * yy
             
-            stoc_Hessian = scale_Hessian + scale_yy@(scale_yy.T / (scale_yy.T@s)) - \
-                           (scale_Hessian @ s)@((s.T @ scale_Hessian) / (s.T @ scale_Hessian @s))
+            stoc_Hessian = scale_Hessian + scale_yy@(scale_yy.T / (scale_yy.T@s + 1e-30)) - \
+                           (scale_Hessian @ s)@((s.T @ scale_Hessian) / (s.T @ scale_Hessian @s + 1e-30))
             base_Hessian = oracles[i].hes(w)
             ind = np.argmax(np.diag(stoc_Hessian) / np.diag(base_Hessian))
             gv = np.zeros([d, 1])
@@ -267,7 +288,7 @@ def sliqn_sol(oracles, max_L, max_M,
     return res, ts
 
 def iqn_sr1_sol(oracles, max_L, max_M,
-            w_opt, init_w, corr=False, epochs=200):
+            w_opt, init_w, corr=False, epochs=200, gamma=0.1):
     N = len(oracles)
     Gs = []
     ws = []
@@ -289,8 +310,8 @@ def iqn_sr1_sol(oracles, max_L, max_M,
     init_time = time.time()
     for _ in range(epochs):
         for i in range(N):
-            #w = np.linalg.pinv(B) @ (u - g)
-            w = invG @ (u - g)
+            #w = invG @ (u - g)
+            w = proximal_solver(w, B, u - g, gamma)
             cur_grad = oracles[i].grad(w)
             s = w - ws[i]
             yy = cur_grad - grads[i]
@@ -314,7 +335,7 @@ def iqn_sr1_sol(oracles, max_L, max_M,
     return res, ts
 
 def sliqn_sr1_sol(oracles, max_L, max_M,
-            w_opt, init_w, corr=False, epochs=200):
+            w_opt, init_w, corr=False, epochs=200, gamma=0.1):
     N = len(oracles)
     Gs = []
     ws = []
@@ -340,8 +361,10 @@ def sliqn_sr1_sol(oracles, max_L, max_M,
         gamma_k = max_M * np.sqrt(max_L) * np.linalg.norm(init_w - w_opt) * (1 - 1 /d)** epo
         invG = invG / (1 + gamma_k)**2
         u = (1 + gamma_k)**2 * u
+        B = B * (1 + gamma_k)**2
         for i in range(N):
-            w = invG @ (u - g)
+            #w = invG @ (u - g)
+            w = proximal_solver(w, B, u - g, gamma)
             cur_grad = oracles[i].grad(w)
             s = w - ws[i]
             yy = cur_grad - grads[i]
@@ -381,7 +404,7 @@ def sliqn_sr1_sol(oracles, max_L, max_M,
     return res, ts
     
 def sliqn_srk_sol(oracles, max_L, max_M, tau,
-            w_opt, init_w, corr=False, epochs=200):
+            w_opt, init_w, corr=False, epochs=200, gamma=0.1):
     N = len(oracles)
     Gs = []
     ws = []
@@ -407,9 +430,11 @@ def sliqn_srk_sol(oracles, max_L, max_M, tau,
     for epo in range(epochs):
         gamma_k = max_M * np.sqrt(max_L) * np.linalg.norm(init_w - w_opt) * (1 - tau /d)** epo
         invG = invG / (1 + gamma_k)**2
+        B = B * (1 + gamma_k)**2
         u = (1 + gamma_k)**2 * u
         for i in range(N):
-            w = invG @ (u - g)
+            #w = invG @ (u - g)
+            w = proximal_solver(w, B, u - g, gamma)
             cur_grad = oracles[i].grad(w)
             s = w - ws[i]
             yy = cur_grad - grads[i]
@@ -450,7 +475,7 @@ def sliqn_srk_sol(oracles, max_L, max_M, tau,
     
     
 def sliqn_block_BFGS(oracles, max_L, max_M, tau,
-            w_opt, init_w, corr=False, epochs=200):
+            w_opt, init_w, corr=False, epochs=200, gamma=0.1):
     N = len(oracles)
     Gs = []
     Ls = []
@@ -481,7 +506,8 @@ def sliqn_block_BFGS(oracles, max_L, max_M, tau,
         B = B * (1 + gamma_k)**2
         u = (1 + gamma_k)**2 * u
         for i in range(N):
-            w = invG @ (u - g)
+            #w = invG @ (u - g)
+            w = proximal_solver(w, B, u - g, gamma)
             cur_grad = oracles[i].grad(w)
             s = w - ws[i]
             yy = cur_grad - grads[i]
@@ -525,52 +551,7 @@ def sliqn_block_BFGS(oracles, max_L, max_M, tau,
         
     return res, ts
 
-def grsr1_sol(oracles, w, L, M, epochs, corr=True):
-    oracle = oracles[0]
-    d=oracle.d
-    G=L*np.eye(d)
-    invG=1/L*np.eye(d)
-    gw = oracle.grad(w)
-  #  invG = np.linalg.pinv(G)
-    res = [np.linalg.norm(gw)]
-    time_t=[0]
-    ts=time.time()
-    for i in range(epochs):
-        dw = - invG @ gw
-        if corr:
-            r = np.sqrt(dw.T @ oracle.hesU(w, dw))
-            G = G * (1 + M * r)
-            invG = invG / (1 + M * r)
 
-
-        w_ = w + dw    
-        gw_ = oracle.grad(w_)
-
-        if np.linalg.norm(gw_)<np.linalg.norm(gw):
-            gw = gw_
-            w=w_
-            corr=True
-        else:
-            corr = False
-        
-        ind = np.argmax(np.diag(G) - oracle.hes_diag(w))
-
-        u = np.zeros([d, 1])
-        u[ind] = 1
-    
-        Gu = G @ u
-        Au = oracle.hesU(w, u)
-        G = G - (Gu - Au) @ (Gu - Au).T / (u.T @ (Gu - Au) + 1e-30)
-        
-        v = invG @ Au
-        invG = invG + (u - v) @ (u - v).T / (u.T @ oracle.hesU(w, u-v) + 1e-30) 
-        gw = oracle.grad(w)
-        res.append(np.linalg.norm(gw))
-        time_t.append(time.time()-ts)
-        if i%50 == 0:
-            print(res[-1])
-    print(res[-1])
-    return res,time_t
     
 # function to convert to superscript
 def get_super(x):
@@ -581,7 +562,7 @@ def get_super(x):
 
 
 def prepare_dataset(dataset):
-    X, Y = sklearn.datasets.load_svmlight_file('./data/libsvm/'+dataset+'.txt')
+    X, Y = sklearn.datasets.load_svmlight_file('../data/libsvm/'+dataset+'.txt')
     X = np.array(X.todense())
     if len(Y.shape) == 1:
         Y = Y.reshape([-1, 1])
@@ -607,8 +588,9 @@ oracle = Logistic(X, Y, reg)
 d = oracle.d
 G = np.eye(d) * oracle.L
 w = np.random.randn(d, 1) / 10
-res, w_opt, warmup_w = newton_sol(w, 20)
-
+t_gamma = 1e-30
+res, w_opt, warmup_w = newton_sol(w, 20, t_gamma)
+#w_opt = lasso_sol(w_opt, t_gamma)
 
 oracles = []
 
@@ -626,37 +608,37 @@ max_M = 0.03
 #init_w = np.random.randn(d, 1) / 10
 init_w = warmup_w
 
-iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=10)
+iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=10, gamma=t_gamma)
 
 max_L = 1e2
 max_M = 3e-2
 #grsr1, grsr1_ts = grsr1_sol(oracles, init_w, max_L, max_M, epochs=200)
 
-iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=500)
+iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=500, gamma=t_gamma)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 max_L = 1e2
 max_M = 1e-16
-sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
+sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500, gamma=t_gamma)
 max_L = 6e-2
 max_L = 6e-1
-#iqn_sr1, iqn_sr1_ts = iqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
+#iqn_sr1, iqn_sr1_ts = iqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500, gamma=t_gamma)
 
 max_L = 1e1
 max_M = 1e-4
 tau = 5
-sliqn_BFGS, sliqn_BFGS_ts = sliqn_block_BFGS(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=500)
+sliqn_BFGS, sliqn_BFGS_ts = sliqn_block_BFGS(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=500, gamma=t_gamma)
 
 
 max_L = 1e+1
 max_M = 1e-4
-sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
+sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500, gamma=t_gamma)
 
 
 max_L = 1e+2
 max_M = 1e-4
 tau = 10
 tau = 5
-sliqn_srk, sliqn_srk_ts = sliqn_srk_sol(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=500)
+sliqn_srk, sliqn_srk_ts = sliqn_srk_sol(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=500, gamma=t_gamma)
 
 fig, ax = plt.subplots(1, 1, figsize=(5, 4))
 plt.plot(iqn[:500], '-', label='IQN', linewidth=2)
