@@ -76,9 +76,9 @@ class Logistic:
         return self.X.T @ (self.X * p * (1-p)) / self.N + self.μ * np.eye(self.d)
         
     def hesU(self, w, U):
-            pred = self.Y * (self.X @ w)
-            p = 0.5 * (1 + np.tanh(-0.5 * pred))
-            return self.X.T@(self.X*p*(1-p)@U)/self.N+self.μ*U
+        pred = self.Y * (self.X @ w)
+        p = 0.5 * (1 + np.tanh(-0.5 * pred))
+        return self.X.T@(self.X*p*(1-p)@U)/self.N+self.μ*U
     
     def hes_diag(self, w):
         pred = self.Y * (self.X @ w)
@@ -447,6 +447,83 @@ def sliqn_srk_sol(oracles, max_L, max_M, tau,
         ts.append(time.time() - init_time)
         
     return res, ts
+    
+    
+def sliqn_block_BFGS(oracles, max_L, max_M, tau,
+            w_opt, init_w, corr=False, epochs=200):
+    N = len(oracles)
+    Gs = []
+    Ls = []
+    ws = []
+    grads = []
+    d = oracles[0].d
+    ts = []
+    I = np.eye(d)
+    
+    g = np.zeros_like(init_w)
+    for i in range(N):
+        Gs.append(np.eye(X.shape[1]) * max_L)
+        Ls.append(np.eye(X.shape[1]) / max_L)
+        ws.append(np.copy(init_w))
+        grads.append(oracles[i].grad(init_w))
+        g = g + grads[-1]        
+    res = [1]
+    init_err = np.linalg.norm(ws[-1] - w_opt)
+    w = np.copy(init_w)
+    B = np.copy(Gs[0])
+    u = Gs[0] @ ws[0]
+    g = g / N
+    invG = np.eye(X.shape[1]) / max_L
+    init_time = time.time()
+    for epo in range(epochs):
+        gamma_k = max_M * np.sqrt(max_L) * np.linalg.norm(init_w - w_opt) * (1 - tau /d)** epo
+        invG = invG / (1 + gamma_k)**2
+        B = B * (1 + gamma_k)**2
+        u = (1 + gamma_k)**2 * u
+        for i in range(N):
+            w = invG @ (u - g)
+            cur_grad = oracles[i].grad(w)
+            s = w - ws[i]
+            yy = cur_grad - grads[i]
+            L = Ls[i] / (1 + gamma_k)
+            
+            scale_Hessian = (1 + gamma_k)**2 * Gs[i]   
+            #scale_yy = (1 + gamma_k) * yy
+            
+            #vec_diff = scale_Hessian @ s - scale_yy
+            #stoc_Hessian = scale_Hessian - vec_diff @ vec_diff.T / (vec_diff.T @ s + 1e-30)
+            stoc_Hessian = scale_Hessian
+            base_Hessian = oracles[i].hes(w)
+            U = np.random.randn(d, tau)
+            LU = L.T@U
+            GLU = stoc_Hessian @ LU
+            ALU = base_Hessian @ LU
+            ALUsqrt = scipy.linalg.sqrtm(np.linalg.inv(LU.T@ALU))
+            
+            stoc_Hessian_2 = stoc_Hessian - GLU @ np.linalg.inv(LU.T@GLU) @ GLU.T + ALU @ np.linalg.inv(LU.T@ALU) @ ALU.T
+            
+            invG = invG - invG @ ALU @ (np.linalg.inv(N* LU.T @ ALU + ALU.T@ invG @ ALU + 1e-30*np.eye(tau)) @ALU.T @ invG)
+            invG = invG + invG @ GLU @ (np.linalg.inv(N* LU.T @ GLU - GLU.T@ invG @ GLU + 1e-30*np.eye(tau)) @GLU.T @ invG)
+            
+            L = L + (U@(scipy.linalg.sqrtm(np.linalg.inv(U.T@U))) - L@(ALU@ALUsqrt))@(ALUsqrt@LU.T)
+            
+            B = B + (stoc_Hessian_2 - scale_Hessian) / N
+            u = u + (stoc_Hessian_2 @ w - scale_Hessian @ ws[i]) / N
+            g = g + yy / N
+                        
+            Gs[i] = np.copy(stoc_Hessian_2)
+            grads[i] = np.copy(cur_grad)
+            ws[i] = np.copy(w)
+            Ls[i] = L
+            
+        tmp_res = np.linalg.norm(ws[-1] - w_opt) / init_err
+        if tmp_res > res[-1]:
+          res.append(res[-1])
+        else:
+          res.append(tmp_res)
+        ts.append(time.time() - init_time)
+        
+    return res, ts
 
 def grsr1_sol(oracles, w, L, M, epochs, corr=True):
     oracle = oracles[0]
@@ -564,6 +641,12 @@ max_L = 6e-2
 max_L = 6e-1
 #iqn_sr1, iqn_sr1_ts = iqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 
+max_L = 1e1
+max_M = 1e-4
+tau = 5
+sliqn_BFGS, sliqn_BFGS_ts = sliqn_block_BFGS(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=500)
+
+
 max_L = 1e+1
 max_M = 1e-4
 sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
@@ -581,6 +664,8 @@ plt.plot(sliqn[:250], '-.', label='SLIQN', linewidth=2)
 #plt.plot(iqn_sr1[:500], '--', label='iqn_sr1', linewidth=2)
 plt.plot(sliqn_sr1[:250], ':', label='GLINS', linewidth=2)
 plt.plot(sliqn_srk[:250], '--', label='GLINS+', linewidth=2)
+plt.plot(sliqn_BFGS[:250], '--', label='BLOCK_BFGS', linewidth=2)
+
 #plt.plot(grsr1[:200], "-.", label="grsr1", linewidth=2)
 
 ax.grid()
@@ -601,6 +686,8 @@ plt.plot(sliqn_ts[:250], sliqn[:250], '-.', label='SLIQN', linewidth=2)
 #plt.plot(iqn_sr1[:400], '--', label='iqn_sr1', linewidth=2)
 plt.plot(sliqn_sr1_ts[:250], sliqn_sr1[:250], ':', label='GLINS', linewidth=2)
 plt.plot(sliqn_srk_ts[:250], sliqn_srk[:250], '--', label='GLINS'+get_super('+'), linewidth=2)
+plt.plot(sliqn_BFGS_ts[:250], sliqn_BFGS[:250], ':', label='GLINS', linewidth=2)
+
 #plt.plot(grsr1[:200], "-.", label="grsr1", linewidth=2)
 
 ax.grid()
