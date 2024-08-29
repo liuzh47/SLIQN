@@ -95,13 +95,16 @@ def local_approx_sol(w, B, g, L_1=1):
     ans = w - grad / L_1
     return ans
     
-def proximal_solver(w, B, g, gamma, L_1=3e3, tol=1e-3):
-    for i in range(100):
+def proximal_solver(w, B, g, gamma, L_1=1e4, tol=1e-3):
+    prev = -1
+    for i in range(5000):
         w_1 = local_approx_sol(w, B, g, L_1)
         w_1 = lasso_sol(w_1, gamma)
         if (L_1 * np.linalg.norm(w - w_1) <= tol):
             break
+            
         w = w_1
+        #w = np.linalg.inv(B) @ g
     return w
 
 def grad_sol(w, epoch, gamma, lr=1e-3):
@@ -110,12 +113,14 @@ def grad_sol(w, epoch, gamma, lr=1e-3):
     res = [np.linalg.norm(gw)]
     for i in range(epoch):
         w_0 = w
+        #w = w - np.linalg.inv(oracle.hes(w)) @ oracle.grad(w)
         w = w - lr * oracle.grad(w)
         w = lasso_sol(w, gamma)
         gw = oracle.grad(w)
 #         res.append(np.sqrt(gw.T @ np.linalg.pinv(oracle.hes(w)) @ gw)[0, 0])   
         res.append(np.linalg.norm(w - w_0))  
-        print(res[-1], oracle.f(w))
+        if i%100 == 0:
+            print(res[-1], oracle.f(w))
         warmup_ws.append(w)
     return res, w, warmup_ws[0]
 
@@ -395,8 +400,8 @@ def sliqn_sr1_sol(oracles, max_L, max_M,
             ws[i] = np.copy(w)
             
         tmp_res = np.linalg.norm(ws[-1] - w_opt) / init_err
-        if tmp_res > res[-1]:
-          res.append(res[-1])
+        if tmp_res > res[-1] + 10:
+          break
         else:
           res.append(tmp_res)
         ts.append(time.time() - init_time)
@@ -465,8 +470,8 @@ def sliqn_srk_sol(oracles, max_L, max_M, tau,
             ws[i] = np.copy(w)
             
         tmp_res = np.linalg.norm(ws[-1] - w_opt) / init_err
-        if tmp_res > res[-1]:
-          res.append(res[-1])
+        if tmp_res > res[-1] + 10:
+          break
         else:
           res.append(tmp_res)
         ts.append(time.time() - init_time)
@@ -543,8 +548,8 @@ def sliqn_block_BFGS(oracles, max_L, max_M, tau,
             Ls[i] = L
             
         tmp_res = np.linalg.norm(ws[-1] - w_opt) / init_err
-        if tmp_res > res[-1]:
-          res.append(res[-1])
+        if tmp_res > res[-1] + 10:
+          break
         else:
           res.append(tmp_res)
         ts.append(time.time() - init_time)
@@ -588,8 +593,8 @@ oracle = Logistic(X, Y, reg)
 d = oracle.d
 G = np.eye(d) * oracle.L
 w = np.random.randn(d, 1) / 10
-t_gamma = 1e-6
-res, w_opt, warmup_w = grad_sol(w, 500, t_gamma)
+t_gamma = 1e-8
+res, w_opt, warmup_w = grad_sol(w, 50000, t_gamma)
 #w_opt = lasso_sol(w_opt, t_gamma)
 
 oracles = []
@@ -662,6 +667,7 @@ plt.tight_layout()
 plt_name = "sliqn_"+ dataset + ".pdf"
 plt.savefig(plt_name, format='pdf', bbox_inches='tight', dpi=300)
 
+"""
 fig, ax = plt.subplots(1, 1, figsize=(5, 4))
 plt.plot(iqn_ts[:250], iqn[:250], '-', label='IQN', linewidth=2)
 plt.plot(sliqn_ts[:250], sliqn[:250], '-.', label='SLIQN', linewidth=2)
@@ -684,3 +690,4 @@ ax.set_title('General Function Minimization')
 plt.tight_layout()
 plt_name = "sliqn_"+ dataset + "_time.pdf"
 plt.savefig(plt_name, format='pdf', bbox_inches='tight', dpi=300)
+"""
