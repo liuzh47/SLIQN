@@ -14,6 +14,7 @@ import scipy.sparse as sparse
 from scipy.sparse import csr_matrix, linalg
 import time
 import heapq
+import pickle
 
 import matplotlib
 matplotlib.use("agg")
@@ -96,18 +97,19 @@ def local_approx_sol(w, B, g, L_1=1):
     return ans
     
 def proximal_solver(w, B, g, gamma, L_1=1e4, tol=1e-3):
-    prev = -1
-    for i in range(5000):
+    w_0 = w
+    for i in range(20000):
         w_1 = local_approx_sol(w, B, g, L_1)
         w_1 = lasso_sol(w_1, gamma)
         if (L_1 * np.linalg.norm(w - w_1) <= tol):
             break
-            
+        if np.max(np.isnan(w_1)) or np.max(np.isinf(w_1)):
+            return proximal_solver(w_0, B, g, gamma, L_1 * 2)
         w = w_1
         #w = np.linalg.inv(B) @ g
     return w
 
-def grad_sol(w, epoch, gamma, lr=1e-3):
+def grad_sol(w, epoch, gamma, lr=5e-2):
     warmup_ws = []
     gw = oracle.grad(w)
     res = [np.linalg.norm(gw)]
@@ -594,7 +596,7 @@ d = oracle.d
 G = np.eye(d) * oracle.L
 w = np.random.randn(d, 1) / 10
 t_gamma = 1e-8
-res, w_opt, warmup_w = grad_sol(w, 50000, t_gamma)
+res, w_opt, warmup_w = grad_sol(w, 100000, t_gamma)
 #w_opt = lasso_sol(w_opt, t_gamma)
 
 oracles = []
@@ -616,6 +618,7 @@ init_w = warmup_w
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=10, gamma=t_gamma)
 
 max_L = 1e2
+max_L = 1e3
 max_M = 3e-2
 #grsr1, grsr1_ts = grsr1_sol(oracles, init_w, max_L, max_M, epochs=200)
 
@@ -623,6 +626,7 @@ iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=500, gamma=t_gamma)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 max_L = 1e2
 max_M = 1e-16
+max_M = 1e-4
 sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500, gamma=t_gamma)
 max_L = 6e-2
 max_L = 6e-1
@@ -644,6 +648,16 @@ max_M = 1e-4
 tau = 10
 tau = 5
 sliqn_srk, sliqn_srk_ts = sliqn_srk_sol(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=500, gamma=t_gamma)
+
+res_list = []
+res_list.append(iqn)
+res_list.append(sliqn)
+res_list.append(sliqn_sr1)
+res_list.append(sliqn_srk)
+res_list.append(sliqn_BFGS)
+
+with open(dataset+".pkl", "wb") as f:
+    pickle.dump(res_list, f)
 
 fig, ax = plt.subplots(1, 1, figsize=(5, 4))
 plt.plot(iqn[:500], '-', label='IQN', linewidth=2)
