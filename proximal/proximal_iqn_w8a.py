@@ -96,7 +96,7 @@ def local_approx_sol(w, B, g, L_1=1):
     ans = w - grad / L_1
     return ans
     
-def proximal_solver(w, B, g, gamma, L_1=1e4, tol=1e-3):
+def proximal_solver(w, B, g, gamma, L_1=5e4, tol=1e-3):
     w_0 = w
     for i in range(20000):
         w_1 = local_approx_sol(w, B, g, L_1)
@@ -111,7 +111,7 @@ def proximal_solver(w, B, g, gamma, L_1=1e4, tol=1e-3):
         #w = np.linalg.inv(B) @ g
     return w
 
-def grad_sol(w, epoch, gamma, lr=5e-2):
+def grad_sol(w, epoch, gamma, lr=1e-1):
     warmup_ws = []
     gw = oracle.grad(w)
     res = [np.linalg.norm(gw)]
@@ -578,16 +578,16 @@ def prepare_dataset(dataset):
     if np.min(Y) != -1:
         Y = 2 * Y - 1
     return X, Y
-dataset = 'a9a' ## 'w8a', 'a6a', 'a9a', 'mushrooms', 'ijcnn1', 'phishing', 'splice_scale', 'svmguide3', 'german.numer_scale', 'covtype'
+dataset = 'w8a' ## 'w8a', 'a6a', 'a9a', 'mushrooms', 'ijcnn1', 'phishing', 'splice_scale', 'svmguide3', 'german.numer_scale', 'covtype'
 X, Y = prepare_dataset(dataset)
 reg = 0.01
-reg = 1e-3
+reg = 1e-4
 oracle = Logistic(X, Y, reg)
 print(X.shape, Y.shape)
 
 
 # In[11]:
-batch_size = 3000
+batch_size = 5000
 num_of_batches = int(X.shape[0] / batch_size)
 data_size = batch_size * num_of_batches
 X = X[:data_size, :]
@@ -598,7 +598,7 @@ d = oracle.d
 G = np.eye(d) * oracle.L
 w = np.random.randn(d, 1) / 10
 t_gamma = 1e-8
-res, w_opt, warmup_w = grad_sol(w, 100000, t_gamma)
+res, w_opt, warmup_w = grad_sol(w, 600000, t_gamma)
 #w_opt = lasso_sol(w_opt, t_gamma)
 
 oracles = []
@@ -612,22 +612,25 @@ print(len(oracles))
 Ls = [o.L for o in oracles]
 Ms = [o.M for o in oracles]
 max_L = 1e2
+max_L = 1e-1
 max_M = 0.03
 
 #init_w = np.random.randn(d, 1) / 10
 init_w = warmup_w
 
+
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=10, gamma=t_gamma)
 
 max_L = 1e2
-max_L = 1e5
+max_L = 1e-1
+#max_L = 1e5
 max_M = 3e-2
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=500, gamma=t_gamma)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 
 
-max_L = 1e-4
-max_L = 1e3
+max_L = 1e-1
+#max_L = 1e3
 max_M = 1e-4
 
 sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500, gamma=t_gamma)
@@ -650,6 +653,7 @@ sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, co
 
 max_L = 1e+2
 max_L = 1e+1
+max_L = 1e0
 max_M = 1e-4
 tau = 10
 tau = 5
