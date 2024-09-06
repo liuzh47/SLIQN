@@ -96,14 +96,14 @@ def local_approx_sol(w, B, g, L_1=1):
     ans = w - grad / L_1
     return ans
     
-def proximal_solver(w, B, g, gamma, L_1=1e1, tol=1e-30):
+def proximal_solver(w, B, g, gamma, L_1=1e0, tol=1e-30):
     w_0 = w
     for i in range(100000):
         w_1 = local_approx_sol(w, B, g, L_1)
         w_1 = lasso_sol(w_1, gamma)
         if (L_1 * np.linalg.norm(w - w_1) <= tol):
             break
-        if np.max(np.isnan(w_1)) or np.max(np.isinf(w_1)):
+        if np.max(np.isnan(w_1)) or np.max(np.isinf(w_1)) or np.linalg.norm(w_1) > 1e120:
             if L_1 > 1e10:
                 return w_0
             return proximal_solver(w_0, B, g, gamma, L_1 * 3)
@@ -625,7 +625,7 @@ max_M = 0.03
 init_w = warmup_w
 
 
-iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=10, gamma=t_gamma)
+iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=3, gamma=t_gamma)
 
 max_L = 1e2
 max_L = 1e-1
