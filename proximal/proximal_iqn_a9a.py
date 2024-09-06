@@ -96,22 +96,22 @@ def local_approx_sol(w, B, g, L_1=1):
     ans = w - grad / L_1
     return ans
     
-def proximal_solver(w, B, g, gamma, L_1=1e4, tol=1e-3):
+def proximal_solver(w, B, g, gamma, L_1=1e1, tol=1e-30):
     w_0 = w
-    for i in range(20000):
+    for i in range(50000):
         w_1 = local_approx_sol(w, B, g, L_1)
         w_1 = lasso_sol(w_1, gamma)
         if (L_1 * np.linalg.norm(w - w_1) <= tol):
             break
         if np.max(np.isnan(w_1)) or np.max(np.isinf(w_1)):
-            if L_1 > 1e10:
+            if L_1 > 1e9:
                 return w_0
-            return proximal_solver(w_0, B, g, gamma, L_1 * 2)
+            return proximal_solver(w_0, B, g, gamma, L_1 * 3)
         w = w_1
-        #w = np.linalg.inv(B) @ g
+    #w = np.linalg.inv(B) @ g
     return w
 
-def grad_sol(w, epoch, gamma, lr=5e-2):
+def grad_sol(w, epoch, gamma, lr=3e-1):
     warmup_ws = []
     gw = oracle.grad(w)
     res = [np.linalg.norm(gw)]
@@ -443,7 +443,10 @@ def sliqn_srk_sol(oracles, max_L, max_M, tau,
         u = (1 + gamma_k)**2 * u
         for i in range(N):
             #w = invG @ (u - g)
+            w_0 = w
             w = proximal_solver(w, B, u - g, gamma)
+            if np.linalg.norm(w_0 - w) <= 1e-19:
+                return res, ts
             cur_grad = oracles[i].grad(w)
             s = w - ws[i]
             yy = cur_grad - grads[i]
@@ -460,10 +463,10 @@ def sliqn_srk_sol(oracles, max_L, max_M, tau,
             GU = stoc_Hessian @ U
             AU = base_Hessian @ U
             DU = GU - AU
-            stoc_Hessian_2 = stoc_Hessian - DU @ np.linalg.inv(U.T @ DU + 1e-30*np.eye(tau)) @ DU.T
+            stoc_Hessian_2 = stoc_Hessian - DU @ np.linalg.pinv(U.T @ DU + 1e-30*np.eye(tau)) @ DU.T
             V = invG @ AU
             Delta = U - V
-            invG = invG + (invG @ DU) @ ((np.linalg.inv(N * U.T @ DU - DU.T@invG @ DU +1e-30*np.eye(tau)))@ (DU.T @ invG) )
+            invG = invG + (invG @ DU) @ ((np.linalg.pinv(N * U.T @ DU - DU.T@invG @ DU +1e-30*np.eye(tau)))@ (DU.T @ invG) )
             #invG = invG + invG @ vec_diff @ vec_diff.T @ invG / (N * vec_diff.T @ s - vec_diff.T @ invG @ vec_diff + 1e-30)
             B = B + (stoc_Hessian_2 - scale_Hessian) / N
             u = u + (stoc_Hessian_2 @ w - scale_Hessian @ ws[i]) / N
@@ -620,14 +623,14 @@ init_w = warmup_w
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=10, gamma=t_gamma)
 
 max_L = 1e2
-max_L = 1e5
+max_L = 1e3
 max_M = 3e-2
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=500, gamma=t_gamma)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 
 
 max_L = 1e-4
-max_L = 1e3
+max_L = 1e1
 max_M = 1e-4
 
 sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500, gamma=t_gamma)
@@ -661,6 +664,7 @@ res_list.append(sliqn)
 res_list.append(sliqn_sr1)
 res_list.append(sliqn_srk)
 res_list.append(sliqn_BFGS)
+res_list.append(w_opt)
 
 with open(dataset+".pkl", "wb") as f:
     pickle.dump(res_list, f)

@@ -96,9 +96,9 @@ def local_approx_sol(w, B, g, L_1=1):
     ans = w - grad / L_1
     return ans
     
-def proximal_solver(w, B, g, gamma, L_1=5e4, tol=1e-3):
+def proximal_solver(w, B, g, gamma, L_1=1e1, tol=1e-30):
     w_0 = w
-    for i in range(20000):
+    for i in range(100000):
         w_1 = local_approx_sol(w, B, g, L_1)
         w_1 = lasso_sol(w_1, gamma)
         if (L_1 * np.linalg.norm(w - w_1) <= tol):
@@ -106,12 +106,12 @@ def proximal_solver(w, B, g, gamma, L_1=5e4, tol=1e-3):
         if np.max(np.isnan(w_1)) or np.max(np.isinf(w_1)):
             if L_1 > 1e10:
                 return w_0
-            return proximal_solver(w_0, B, g, gamma, L_1 * 2)
+            return proximal_solver(w_0, B, g, gamma, L_1 * 3)
         w = w_1
         #w = np.linalg.inv(B) @ g
     return w
 
-def grad_sol(w, epoch, gamma, lr=1e-1):
+def grad_sol(w, epoch, gamma, lr=3e-1):
     warmup_ws = []
     gw = oracle.grad(w)
     res = [np.linalg.norm(gw)]
@@ -460,10 +460,10 @@ def sliqn_srk_sol(oracles, max_L, max_M, tau,
             GU = stoc_Hessian @ U
             AU = base_Hessian @ U
             DU = GU - AU
-            stoc_Hessian_2 = stoc_Hessian - DU @ np.linalg.inv(U.T @ DU + 1e-30*np.eye(tau)) @ DU.T
+            stoc_Hessian_2 = stoc_Hessian - DU @ np.linalg.pinv(U.T @ DU + 1e-30*np.eye(tau)) @ DU.T
             V = invG @ AU
             Delta = U - V
-            invG = invG + (invG @ DU) @ ((np.linalg.inv(N * U.T @ DU - DU.T@invG @ DU +1e-30*np.eye(tau)))@ (DU.T @ invG) )
+            invG = invG + (invG @ DU) @ ((np.linalg.pinv(N * U.T @ DU - DU.T@invG @ DU +1e-30*np.eye(tau)))@ (DU.T @ invG) )
             #invG = invG + invG @ vec_diff @ vec_diff.T @ invG / (N * vec_diff.T @ s - vec_diff.T @ invG @ vec_diff + 1e-30)
             B = B + (stoc_Hessian_2 - scale_Hessian) / N
             u = u + (stoc_Hessian_2 @ w - scale_Hessian @ ws[i]) / N
@@ -599,7 +599,13 @@ G = np.eye(d) * oracle.L
 w = np.random.randn(d, 1) / 10
 t_gamma = 1e-8
 res, w_opt, warmup_w = grad_sol(w, 600000, t_gamma)
-#w_opt = lasso_sol(w_opt, t_gamma)
+
+#import pickle 
+#with open("w8a.pkl", "rb") as f:
+#    res_list = pickle.load(f)
+    
+#w_opt = res[-1]
+#warmup_w  = w
 
 oracles = []
 
@@ -665,6 +671,7 @@ res_list.append(sliqn)
 res_list.append(sliqn_sr1)
 res_list.append(sliqn_srk)
 res_list.append(sliqn_BFGS)
+res_list.append(w_opt)
 
 with open(dataset+".pkl", "wb") as f:
     pickle.dump(res_list, f)
