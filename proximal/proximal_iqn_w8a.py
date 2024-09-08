@@ -523,11 +523,13 @@ def sliqn_block_BFGS(oracles, max_L, max_M, tau,
             L = Ls[i] / (1 + gamma_k)
             
             scale_Hessian = (1 + gamma_k)**2 * Gs[i]   
-            #scale_yy = (1 + gamma_k) * yy
+            scale_yy = (1 + gamma_k) * yy
             
             #vec_diff = scale_Hessian @ s - scale_yy
             #stoc_Hessian = scale_Hessian - vec_diff @ vec_diff.T / (vec_diff.T @ s + 1e-30)
-            stoc_Hessian = scale_Hessian
+            #stoc_Hessian = scale_Hessian
+            stoc_Hessian = scale_Hessian + scale_yy@(scale_yy.T / (scale_yy.T@s + 1e-30)) - \
+                           (scale_Hessian @ s)@((s.T @ scale_Hessian) / (s.T @ scale_Hessian @s + 1e-30))
             base_Hessian = oracles[i].hes(w)
             U = np.random.randn(d, tau)
             LU = L.T@U
