@@ -580,10 +580,10 @@ def prepare_dataset(dataset):
     if np.min(Y) != -1:
         Y = 2 * Y - 1
     return X, Y
-dataset = 'w8a' ## 'w8a', 'a6a', 'a9a', 'mushrooms', 'ijcnn1', 'phishing', 'splice_scale', 'svmguide3', 'german.numer_scale', 'covtype'
+dataset = 'covtype' ## 'w8a', 'a6a', 'a9a', 'mushrooms', 'ijcnn1', 'phishing', 'splice_scale', 'svmguide3', 'german.numer_scale', 'covtype'
 X, Y = prepare_dataset(dataset)
 reg = 0.01
-reg = 1e-4
+reg = 1e-3
 oracle = Logistic(X, Y, reg)
 print(X.shape, Y.shape)
 
@@ -600,14 +600,14 @@ d = oracle.d
 G = np.eye(d) * oracle.L
 w = np.random.randn(d, 1) / 10
 t_gamma = 1e-8
-#res, w_opt, warmup_w = grad_sol(w, 600000, t_gamma)
+res, w_opt, warmup_w = grad_sol(w, 600000, t_gamma)
 
-import pickle 
-with open("w8a.pkl", "rb") as f:
-    res_list = pickle.load(f)
+#import pickle 
+#with open("w8a.pkl", "rb") as f:
+#    res_list = pickle.load(f)
     
-w_opt = res_list[-1]
-warmup_w  = w
+#w_opt = res_list[-1]
+#warmup_w  = w
 
 oracles = []
 
@@ -620,7 +620,7 @@ print(len(oracles))
 Ls = [o.L for o in oracles]
 Ms = [o.M for o in oracles]
 max_L = 1e2
-max_L = 1e-1
+max_L = 1e1
 max_M = 0.03
 
 #init_w = np.random.randn(d, 1) / 10
@@ -630,14 +630,14 @@ init_w = warmup_w
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=3, gamma=t_gamma)
 
 max_L = 1e2
-max_L = 1e-1
+max_L = 1e1
 #max_L = 1e5
 max_M = 3e-2
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=500, gamma=t_gamma)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 
 
-max_L = 1e-1
+max_L = 1e1
 #max_L = 1e3
 max_M = 1e-4
 
@@ -647,7 +647,7 @@ max_L = 6e-1
 #iqn_sr1, iqn_sr1_ts = iqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500, gamma=t_gamma)
 
 max_L = 1e1
-max_L = 1e-1
+max_L = 1e1
 max_M = 1e-4
 tau = 5
 sliqn_BFGS, sliqn_BFGS_ts = sliqn_block_BFGS(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=500, gamma=t_gamma)
@@ -662,6 +662,7 @@ sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, co
 max_L = 1e+2
 max_L = 1e+1
 max_L = 1e-1
+max_L = 2e2
 max_M = 1e-4
 tau = 10
 tau = 5

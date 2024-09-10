@@ -381,8 +381,6 @@ def sliqn_sr1_sol(oracles, max_L, max_M,
             scale_Hessian = (1 + gamma_k)**2 * Gs[i]   
             scale_yy = (1 + gamma_k) * yy
             
-            #vec_diff = scale_Hessian @ s - scale_yy
-            #stoc_Hessian = scale_Hessian - vec_diff @ vec_diff.T / (vec_diff.T @ s + 1e-30)
             stoc_Hessian = scale_Hessian
             base_Hessian = oracles[i].hes(w)
             ind = np.argmax(np.diag(stoc_Hessian) - np.diag(base_Hessian))
@@ -452,10 +450,8 @@ def sliqn_srk_sol(oracles, max_L, max_M, tau,
             yy = cur_grad - grads[i]
             
             scale_Hessian = (1 + gamma_k)**2 * Gs[i]   
-            #scale_yy = (1 + gamma_k) * yy
+            scale_yy = (1 + gamma_k) * yy
             
-            #vec_diff = scale_Hessian @ s - scale_yy
-            #stoc_Hessian = scale_Hessian - vec_diff @ vec_diff.T / (vec_diff.T @ s + 1e-30)
             stoc_Hessian = scale_Hessian
             base_Hessian = oracles[i].hes(w)
             inds = heapq.nlargest(tau, range(d), list(np.diag(stoc_Hessian - base_Hessian)).__getitem__ )
@@ -601,8 +597,14 @@ d = oracle.d
 G = np.eye(d) * oracle.L
 w = np.random.randn(d, 1) / 10
 t_gamma = 1e-8
-res, w_opt, warmup_w = grad_sol(w, 100000, t_gamma)
+#res, w_opt, warmup_w = grad_sol(w, 100000, t_gamma)
 #w_opt = lasso_sol(w_opt, t_gamma)
+
+with open("a9a.pkl", "rb") as f:
+    tmp = pickle.load(f)
+    w_opt = tmp[-1]
+    warmup_w = w
+
 
 oracles = []
 
