@@ -637,7 +637,7 @@ iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=500, gamma=t_gamma)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
 
 
-max_L = 1e1
+max_L = 1e-1
 #max_L = 1e3
 max_M = 1e-4
 
@@ -647,7 +647,7 @@ max_L = 6e-1
 #iqn_sr1, iqn_sr1_ts = iqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500, gamma=t_gamma)
 
 max_L = 1e1
-max_L = 1e1
+max_L = 1e-1
 max_M = 1e-4
 tau = 5
 sliqn_BFGS, sliqn_BFGS_ts = sliqn_block_BFGS(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=500, gamma=t_gamma)

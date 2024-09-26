@@ -577,7 +577,7 @@ def prepare_dataset(dataset):
     if np.min(Y) != -1:
         Y = 2 * Y - 1
     return X, Y
-dataset = 'german.numer_scale' ## 'w8a', 'a6a', 'a9a', 'mushrooms', 'ijcnn1', 'phishing', 'splice_scale', 'svmguide3', 'german.numer_scale', 'covtype'
+dataset = 'mushrooms' ## 'w8a', 'a6a', 'a9a', 'mushrooms', 'ijcnn1', 'phishing', 'splice_scale', 'svmguide3', 'german.numer_scale', 'covtype'
 X, Y = prepare_dataset(dataset)
 reg = 0.01
 reg = 1e-3
@@ -586,7 +586,7 @@ print(X.shape, Y.shape)
 
 
 # In[11]:
-batch_size = 100
+batch_size = 500
 num_of_batches = int(X.shape[0] / batch_size)
 data_size = batch_size * num_of_batches
 X = X[:data_size, :]
@@ -654,7 +654,7 @@ sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, co
 
 
 max_L = 1e+2
-max_L = 3e1
+max_L = 1e2
 max_M = 1e-4
 tau = 10
 tau = 5
