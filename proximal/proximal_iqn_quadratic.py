@@ -637,23 +637,23 @@ print(len(oracles))
 
 #newton, _, warmup_w = newton_sol(oracles[0], w, 40)
 
-max_L = 2e4
+max_L = 3e4
 max_M = 0.03
 
 #init_w = np.random.randn(d, 1) / 10
 #init_w = ws[250]
-init_w = w_opt + np.random.randn(d, 1) * 10.
+init_w = w_opt + np.random.randn(d, 1) * 100.
 
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=10, gamma=t_gamma)
 
 
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=200, gamma=t_gamma)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
-max_L = 2e4
+max_L = 3e4
 max_M = 0
 sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=200, gamma=t_gamma)
 
-max_L = 2e4
+max_L = 1e5
 max_M = 0
 tau = 5
 sliqn_BFGS, sliqn_BFGS_ts = sliqn_block_BFGS(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=200, gamma=t_gamma)
