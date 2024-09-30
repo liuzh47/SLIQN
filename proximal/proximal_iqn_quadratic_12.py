@@ -653,7 +653,8 @@ max_L = 2e4
 max_M = 0
 sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=200, gamma=t_gamma)
 
-max_L = 5e4
+max_L = 8e4
+max_L = 2e5
 max_M = 0
 tau = 2
 sliqn_BFGS, sliqn_BFGS_ts = sliqn_block_BFGS(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=200, gamma=t_gamma)
