@@ -606,7 +606,7 @@ def get_super(x):
 # In[11]:
 num_of_instances = 10
 d = 100
-xi = 8
+xi = 4
 
 w = np.random.randn(d, 1) / 10
 
@@ -637,7 +637,7 @@ print(len(oracles))
 
 #newton, _, warmup_w = newton_sol(oracles[0], w, 40)
 
-max_L = 2e3
+max_L = 2e2
 
 max_M = 0.03
 
@@ -650,25 +650,29 @@ iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=10, gamma=t_gamma)
 
 iqn, iqn_ts = iqn_sol(oracles, max_L, w_opt, init_w, epochs=200, gamma=t_gamma)
 #iqs = iqs_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=500)
-max_L = 2e3
+max_L = 2e2
 
 max_M = 0
 sliqn, sliqn_ts = sliqn_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=200, gamma=t_gamma)
 
-max_L = 6e3
+max_L = 2e2
+max_L = 4e2
+max_L = 1e2
 max_M = 0
 tau = 2
 sliqn_BFGS, sliqn_BFGS_ts = sliqn_block_BFGS(oracles, max_L, max_M, tau, w_opt, init_w, corr=False, epochs=200, gamma=t_gamma)
 
 #small kappa
 #max_L = 1e2
-max_L = 1e4
+max_L = 3e3
+max_L = 2e3
+max_L = 1e3
 max_M = 0
 sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=200, gamma=t_gamma)
 
 #small kappa
 #max_L = 4e3
-max_L = 6e4
+max_L = 4e3
 max_M = 0
 tau = 5
 #tau = 2
@@ -705,5 +709,5 @@ ax.set_ylabel('Normalized Error')
 ax.set_xlabel('No of effective passes')
 ax.set_title('Quadratic Function Minimization')
 plt.tight_layout()
-plt_name = "sliqn_quadratic.pdf"
+plt_name = str(xi) + "sliqn_quadratic.pdf"
 plt.savefig(plt_name, format='pdf', bbox_inches='tight', dpi=300)
