@@ -672,6 +672,8 @@ sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, co
 #small kappa
 #max_L = 4e3
 max_L = 6e4
+max_L = 3e4
+max_L = 1e4
 max_M = 0
 tau = 5
 #tau = 2

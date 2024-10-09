@@ -667,12 +667,16 @@ sliqn_BFGS, sliqn_BFGS_ts = sliqn_block_BFGS(oracles, max_L, max_M, tau, w_opt, 
 max_L = 3e3
 max_L = 2e3
 max_L = 1e3
+max_L = 5e2
+max_L = 2e2
 max_M = 0
 sliqn_sr1, sliqn_sr1_ts = sliqn_sr1_sol(oracles, max_L, max_M, w_opt, init_w, corr=False, epochs=200, gamma=t_gamma)
 
 #small kappa
 #max_L = 4e3
 max_L = 4e3
+max_L = 2e3
+max_L = 1e3
 max_M = 0
 tau = 5
 #tau = 2
